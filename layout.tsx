@@ -1,25 +1,37 @@
-import './globals.css';
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import { AuthProvider } from '@/lib/auth-context';
-import { Toaster } from 'sonner';
+'use client';
 
-const inter = Inter({ subsets: ['latin'] });
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/auth-context';
+import { Skeleton } from '@/components/ui/skeleton';
+import { GraduationCap } from 'lucide-react';
 
-export const metadata: Metadata = {
-  title: 'EduAI — AI-Powered Educational Content Platform',
-  description: 'Generate, verify, and distribute NEP 2020-compliant educational content with AI verification agents.',
-};
+export default function StudentLayout({ children }: { children: React.ReactNode }) {
+  const { profile, loading } = useAuth();
+  const router = useRouter();
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <body className={inter.className}>
-        <AuthProvider>
-          {children}
-          <Toaster position="top-right" richColors />
-        </AuthProvider>
-      </body>
-    </html>
-  );
+  useEffect(() => {
+    if (!loading) {
+      if (!profile) {
+        router.push('/login');
+      } else if (profile.role.toLowerCase() !== 'student') {
+        router.push(`/${profile.role.toLowerCase()}`);
+      }
+    }
+  }, [profile, loading, router]);
+
+  if (loading || !profile) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex h-12 w-12 animate-pulse items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <GraduationCap className="h-7 w-7" />
+          </div>
+          <Skeleton className="h-4 w-32" />
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
 }

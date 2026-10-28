@@ -1,148 +1,156 @@
 'use client';
 
-import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { AppNav } from '@/components/app-nav';
 import { useAuth } from '@/lib/auth-context';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { GraduationCap, FileText, ShieldCheck, Languages, BarChart3, Bell, Sparkles, ArrowRight, Brain, CheckCircle2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { supabase } from '@/lib/supabase/client';
+import { Notification } from '@/lib/types';
+import { Bell, Clock, Calendar, Trash2, Plus } from 'lucide-react';
+import { toast } from 'sonner';
 
-export default function Home() {
-  const { user, profile } = useAuth();
+export default function NotificationsPage() {
+  const { profile } = useAuth();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [title, setTitle] = useState('');
+  const [scheduledFor, setScheduledFor] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const features = [
-    { icon: FileText, title: 'Academic content studio', desc: 'Generate source-grounded study notes, visual learning notes, and structured lecture decks.' },
-    { icon: ShieldCheck, title: 'Review-ready content', desc: 'Generate structured drafts for professor review. Automated fact-checking and NEP scoring are not enabled in this build.' },
-    { icon: Languages, title: 'Language-aware drafts', desc: 'Generate academic drafts in the selected target language.' },
-    { icon: Brain, title: 'Google Forms publishing', desc: 'Create live student quizzes and receive form links through the configured Apps Script webhook.' },
-    { icon: BarChart3, title: 'Admin Telemetry', desc: 'Time-saved heuristics, SUS usability scores, adoption intent, and feature usage analytics.' },
-    { icon: Bell, title: 'Student Hub', desc: 'Shared materials portal with notebook alarms and milestone scheduling via Web Push.' },
-  ];
+  useEffect(() => {
+    if (!profile) return;
+    (async () => {
+      const { data, error } = await supabase.from('student_alarms')
+        .select('id, student_id, title, alarm_time, is_completed, created_at')
+        .eq('student_id', profile.id)
+        .order('alarm_time', { ascending: true });
+      setLoadError(error?.message ?? null);
+      setNotifications((data ?? []).map((alarm) => ({
+        id: alarm.id,
+        user_id: alarm.student_id ?? profile.id,
+        title: alarm.title,
+        scheduled_for: alarm.alarm_time,
+        notification_type: 'Reminder',
+        is_sent: alarm.is_completed ?? false,
+        created_at: alarm.created_at ?? '',
+      })));
+      setIsLoading(false);
+    })();
+  }, [profile]);
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!profile) return;
+    const alarmTime = new Date(scheduledFor);
+    if (!title.trim() || !scheduledFor || Number.isNaN(alarmTime.getTime()) || alarmTime <= new Date()) {
+      toast.error('Enter a title and a future reminder time.');
+      return;
+    }
+    const { data, error } = await supabase.from('student_alarms').insert({
+      student_id: profile.id,
+      title: title.trim(),
+      alarm_time: alarmTime.toISOString(),
+      is_completed: false,
+    }).select().single();
+
+    if (error) {
+      setLoadError(error.message);
+      toast.error(`Failed to save reminder: ${error.message}`);
+    } else {
+      const alarm: Notification = {
+        id: data.id,
+        user_id: data.student_id ?? profile.id,
+        title: data.title,
+        scheduled_for: data.alarm_time,
+        notification_type: 'Reminder',
+        is_sent: data.is_completed ?? false,
+        created_at: data.created_at ?? '',
+      };
+      setNotifications((current) => [...current, alarm].sort((a, b) => a.scheduled_for.localeCompare(b.scheduled_for)));
+      setLoadError(null);
+      setTitle(''); setScheduledFor('');
+      toast.success('In-app reminder saved. The app does not send push or email notifications.');
+    }
+  }
+
+  async function handleDelete(id: string) {
+    const { error } = await supabase.from('student_alarms').delete().eq('id', id);
+    if (error) {
+      toast.error(`Failed to delete reminder: ${error.message}`);
+    } else {
+      setNotifications(notifications.filter(n => n.id !== id));
+      toast.success('Notification removed');
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-background to-background">
-      {/* Nav */}
-      <nav className="sticky top-0 z-50 border-b border-border/40 bg-card/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <GraduationCap className="h-5 w-5" />
-            </div>
-            <span className="text-xl font-bold tracking-tight">EduAI</span>
-          </div>
-          <div className="flex items-center gap-3">
-            {user ? (
-              <Link href={`/${(profile?.role ?? 'student').toLowerCase()}`}>
-                <Button size="sm" className="gap-2">
-                  Go to Dashboard <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
-            ) : (
-              <>
-                <Link href="/login">
-                  <Button variant="ghost" size="sm">Sign In</Button>
-                </Link>
-                <Link href="/signup">
-                  <Button size="sm">Get Started</Button>
-                </Link>
-              </>
-            )}
-          </div>
+    <AppNav>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Study Reminders</h1>
+          <p className="mt-1 text-muted-foreground">Save an in-app reminder. Push and email delivery are not configured.</p>
         </div>
-      </nav>
-
-      {/* Hero */}
-      <section className="relative overflow-hidden px-6 pt-20 pb-16">
-        <div className="absolute inset-0 -z-10">
-          <div className="absolute left-1/2 top-0 h-[400px] w-[600px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
-          <div className="absolute right-0 top-40 h-[300px] w-[300px] rounded-full bg-accent/10 blur-3xl" />
-        </div>
-        <div className="mx-auto max-w-4xl text-center">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary animate-fade-in">
-            <Sparkles className="h-4 w-4" />
-            NEP 2020 Compliant AI Education Platform
-          </div>
-          <h1 className="mb-6 text-5xl font-bold tracking-tight text-foreground sm:text-6xl animate-slide-up">
-            Generate, verify, and distribute
-            <br />
-            <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">educational content with AI</span>
-          </h1>
-          <p className="mx-auto mb-10 max-w-2xl text-lg text-muted-foreground animate-slide-up">
-            A workspace for professors and students. Generate source-grounded decks and differentiated study notes,
-            then publish quizzes and share course materials.
-          </p>
-          <div className="flex flex-col items-center justify-center gap-4 sm:flex-row animate-slide-up">
-            {!user && (
-              <>
-                <Link href="/signup">
-                  <Button size="lg" className="gap-2 px-8">
-                    Start Creating <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </Link>
-                <Link href="/login">
-                  <Button size="lg" variant="outline" className="px-8">Sign In</Button>
-                </Link>
-              </>
-            )}
-          </div>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-muted-foreground">
-            {(['Review-ready AI drafts', 'Supabase-backed when configured', 'Structured and visual notes', 'Live Google Forms publishing'] || []).map((item) => (
-              <div key={item} className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-accent" />
-                {item}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="px-6 py-16">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-12 text-center">
-            <h2 className="mb-4 text-3xl font-bold tracking-tight">Everything educators need, in one platform</h2>
-            <p className="text-muted-foreground">From content generation to student distribution, with professor review before classroom use.</p>
-          </div>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {(features || []).map((f, i) => (
-              <Card key={i} className="group border-border/60 transition-all hover:border-primary/30 hover:shadow-lg animate-scale-in">
-                <CardHeader>
-                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                    <f.icon className="h-6 w-6" />
-                  </div>
-                  <CardTitle className="text-xl">{f.title}</CardTitle>
-                  <CardDescription className="text-base leading-relaxed">{f.desc}</CardDescription>
-                </CardHeader>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="px-6 py-20">
-        <div className="mx-auto max-w-4xl">
-          <Card className="overflow-hidden border-primary/20 bg-secondary/40">
-            <CardContent className="p-12 text-center">
-              <h2 className="mb-4 text-3xl font-bold text-foreground">Ready to transform your teaching?</h2>
-              <p className="mb-8 text-muted-foreground">Join EduAI and create verified, multilingual educational content in minutes.</p>
-              <Link href="/signup">
-                <Button size="lg" className="gap-2 bg-accent text-white hover:bg-accent/90">
-                  Create Free Account <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
+        {loadError && <Card className="border-destructive/40 bg-destructive/5"><CardContent className="py-4 text-sm text-destructive">Reminders could not be loaded or saved: {loadError}</CardContent></Card>}
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Plus className="h-5 w-5 text-primary" /> Schedule Reminder</CardTitle>
+              <CardDescription>Save a reminder to your student dashboard</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleCreate} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="title">Title</Label>
+                  <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Chapter 5 Review" required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="scheduledFor">Schedule For</Label>
+                  <Input id="scheduledFor" type="datetime-local" min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)} value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} required />
+                </div>
+                <Button type="submit" className="w-full gap-2"><Bell className="h-4 w-4" /> Save Reminder</Button>
+              </form>
             </CardContent>
           </Card>
-        </div>
-      </section>
 
-      <footer className="border-t border-border/40 px-6 py-8">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <GraduationCap className="h-4 w-4" /> EduAI Platform
+          <div className="space-y-3">
+            <h2 className="text-xl font-semibold">Scheduled ({notifications.length})</h2>
+            {isLoading ? <Card><CardContent className="py-8 text-center text-muted-foreground">Loading reminders...</CardContent></Card> : loadError ? null : notifications.length === 0 ? (
+              <Card className="border-dashed">
+                <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                  <Bell className="mb-3 h-10 w-10 text-muted-foreground/50" />
+                  <p className="text-muted-foreground">No notifications scheduled</p>
+                </CardContent>
+              </Card>
+            ) : (
+              (notifications || []).map((n) => (
+                <Card key={n.id} className="border-border/60">
+                  <CardContent className="flex items-start justify-between p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                        <Clock className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{n.title}</p>
+                        <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                          <Calendar className="h-3 w-3" /> {new Date(n.scheduled_for).toLocaleString()}
+                        </p>
+                        <span className="mt-1 inline-block rounded-full bg-muted px-2 py-0.5 text-xs font-medium capitalize">In-app reminder</span>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(n.id)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
-          <p className="text-sm text-muted-foreground">NEP 2020 Compliant Educational AI</p>
         </div>
-      </footer>
-    </div>
+      </div>
+    </AppNav>
   );
 }
