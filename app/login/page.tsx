@@ -16,9 +16,15 @@ export default function LoginPage() {
     event.preventDefault()
     setPending(true)
     setError('')
-    const { error: signInError } = await createClient().auth.signInWithPassword({ email, password })
-    if (signInError) setError('Invalid email or password. If your email is not confirmed, check your inbox first.')
-    else router.push('/')
+    const supabase = createClient()
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+    if (signInError) {
+      setError('Invalid email or password. If your email is not confirmed, check your inbox first.')
+    } else {
+      const role = data.user?.user_metadata?.role === 'professor' ? 'professor' : 'student'
+      router.replace(`/${role}`)
+      router.refresh()
+    }
     setPending(false)
   }
 
