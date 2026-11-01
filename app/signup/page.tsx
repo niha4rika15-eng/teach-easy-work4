@@ -21,7 +21,10 @@ export default function SignupPage() {
     setMessage('')
     const { data, error: signUpError } = await createClient().auth.signUp({ email, password, options: { emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? `${window.location.origin}/auth/callback`, data: { role } } })
     if (signUpError) setError(signUpError.message.includes('password') ? signUpError.message : 'Unable to create this account. Check your details and try again.')
-    else if (data.session) router.push('/')
+    else if (data.session) {
+      router.replace(`/${role}`)
+      router.refresh()
+    }
     else setMessage('Account created. Check your email to confirm your account before signing in.')
     setPending(false)
   }

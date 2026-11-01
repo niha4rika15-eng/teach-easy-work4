@@ -1,0 +1,5 @@
+import Link from 'next/link'
+
+export default function StudentDashboard() {
+  return <main className="min-h-screen bg-[#0d0618] px-6 py-16 text-white"><div className="mx-auto max-w-5xl"><p className="text-sm font-semibold uppercase tracking-[0.24em] text-emerald-400">Teach Easy</p><h1 className="mt-5 text-4xl font-semibold">Student dashboard</h1><p className="mt-3 text-violet-200/70">Your learning workspace is ready.</p><div className="mt-10 grid gap-4 sm:grid-cols-2"><Link href="/student/notifications" className="rounded-2xl border border-violet-300/20 bg-violet-950/40 p-6 hover:border-emerald-400/60"><span className="text-xl font-semibold">Notifications</span><span className="mt-2 block text-sm text-violet-200/70">Review reminders and updates.</span></Link><Link href="/" className="rounded-2xl border border-violet-300/20 bg-violet-950/40 p-6 hover:border-emerald-400/60"><span className="text-xl font-semibold">Home</span><span className="mt-2 block text-sm text-violet-200/70">Return to the Teach Easy welcome page.</span></Link></div></div></main>
+}
