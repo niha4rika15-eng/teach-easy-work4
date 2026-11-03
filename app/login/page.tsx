@@ -40,5 +40,5 @@ export default function LoginPage() {
 }
 
 function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
-  return <main className="min-h-screen bg-[#0d0618] px-6 py-16 text-white"><div className="mx-auto max-w-md"><Link href="/" className="text-sm font-semibold uppercase tracking-[0.24em] text-emerald-400">Teach Easy</Link><div className="mt-8 rounded-2xl border border-violet-300/20 bg-violet-950/40 p-8"><h1 className="text-3xl font-semibold">{title}</h1><p className="mt-2 text-violet-200/70">{subtitle}</p><div className="mt-8">{children}</div></div></div></main>
+  return <main className="min-h-screen bg-background px-6 py-16 text-white"><div className="mx-auto max-w-md"><Link href="/" className="text-sm font-semibold uppercase tracking-[0.24em] text-emerald-400">Teach Easy</Link><div className="mt-8 rounded-2xl border border-violet-300/20 bg-violet-950/40 p-8"><h1 className="text-3xl font-semibold">{title}</h1><p className="mt-2 text-violet-200/70">{subtitle}</p><div className="mt-8">{children}</div></div></div></main>
 }

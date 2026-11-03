@@ -49,7 +49,7 @@ export function AppNav({ children }: { children: ReactNode }) {
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                 <GraduationCap className="h-5 w-5" />
               </div>
-              <span className="text-lg font-bold">EduAI</span>
+              <span className="text-lg font-bold">Teach Easy</span>
             </Link>
             <div className="hidden items-center gap-1 sm:flex">
               {(items || []).map((item) => (
