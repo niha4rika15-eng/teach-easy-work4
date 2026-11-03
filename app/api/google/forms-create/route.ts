@@ -89,7 +89,8 @@ export async function POST(request: Request) {
       webhookResponse = await fetch(endpointUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, questions }),
+        // Apps Script doPost reads this JSON string from e.postData.contents.
+        body: JSON.stringify({ title: form.title, description: form.description, questions }),
         cache: 'no-store',
         redirect: 'follow',
         signal: AbortSignal.timeout(30_000),
@@ -99,6 +100,9 @@ export async function POST(request: Request) {
       return jsonError('Could not reach the Google Apps Script publishing service.', 502)
     }
     const responseText = await webhookResponse.text()
+    if (webhookResponse.status === 401 || webhookResponse.status === 403) {
+      return jsonError('The Apps Script web app requires Google sign-in. Redeploy it with "Execute as: Me" and "Who has access: Anyone", then update google_gorm_api with the new /exec URL (see docs/google-apps-script/Code.gs).', 502, { code: 'apps_script_access_denied' })
+    }
     if (!webhookResponse.ok) return jsonError(`Google Forms publishing failed with status ${webhookResponse.status}.`, 502)
 
     let payload: unknown

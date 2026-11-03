@@ -23,7 +23,7 @@ test('combineSynthesisContext includes the complete prompt and every retrieved c
 
 test('combineSynthesisContext rejects oversized context instead of truncating it', () => {
   assert.throws(
-    () => combineSynthesisContext('x'.repeat(32_001), []),
+    () => combineSynthesisContext('x'.repeat(240_001), []),
     /Narrow the source text/,
   )
 })

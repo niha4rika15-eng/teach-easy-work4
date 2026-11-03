@@ -28,6 +28,8 @@ export function AppNav({ children }: { children: ReactNode }) {
       { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
       { href: '/admin/metrics', label: 'Telemetry', icon: BarChart3 },
       { href: '/admin/users', label: 'Users', icon: Users },
+      { href: '/professor/generate', label: 'Generate', icon: FileText },
+      { href: '/professor/share', label: 'Materials', icon: BookOpen },
     ],
   };
 

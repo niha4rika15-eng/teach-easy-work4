@@ -74,20 +74,29 @@ export async function createChatCompletion(messages: ChatMessage[], options: Cha
 async function requestChat(config: ReturnType<typeof getChatConfig>, model: string, messages: ChatMessage[], options: ChatOptions) {
   const maxAttempts = options.maxAttempts ?? 3
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const response = await fetch(config.url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: 0.2,
-        [config.tokenField]: options.maxTokens ?? 4000,
-        ...config.extra,
-        ...(options.jsonObject ? { response_format: { type: 'json_object' } } : {}),
-      }),
-      cache: 'no-store',
-      signal: AbortSignal.timeout(options.timeoutMs ?? 90_000),
-    })
+    let response: Response
+    try {
+      response = await fetch(config.url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.2,
+          [config.tokenField]: options.maxTokens ?? 4000,
+          ...config.extra,
+          ...(options.jsonObject ? { response_format: { type: 'json_object' } } : {}),
+        }),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(options.timeoutMs ?? 90_000),
+      })
+    } catch (error) {
+      // Timeouts and network failures are retried, then fall through to the next model.
+      if (attempt === maxAttempts - 1) {
+        throw Object.assign(new Error(`${config.label} request failed: ${(error as Error).message}`), { retryable: true })
+      }
+      continue
+    }
 
     if (response.ok) {
       const payload = await response.json() as ChatResponse

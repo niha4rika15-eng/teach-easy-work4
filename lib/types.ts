@@ -98,7 +98,7 @@ export const TEMPLATE_TYPE_LABELS: Record<string, string> = {
   lesson_plan: 'Lesson Plan',
   quiz: 'Quiz',
   ppt_outline: 'PPT Outline',
-  word_brief: 'Word Brief',
+  word_brief: 'Structured Notes',
   visual_notes: 'Visual Notes',
   research_paper: 'Research Paper',
 };

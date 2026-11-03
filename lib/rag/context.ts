@@ -1,6 +1,6 @@
 import type { RetrievedChunk } from './retrieval'
 
-export const MAX_SYNTHESIS_CONTEXT_CHARACTERS = 32_000
+export const MAX_SYNTHESIS_CONTEXT_CHARACTERS = 240_000
 
 export function combineSynthesisContext(sourceMaterial: string, chunks: RetrievedChunk[]) {
   const uploadedSources = chunks.map((chunk) => (

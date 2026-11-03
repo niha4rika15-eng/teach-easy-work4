@@ -1,15 +1,18 @@
 import { z } from 'zod'
 import { jsonError, requireProfessorOrAdmin } from '@/lib/api-auth'
 import { parseQuizJson } from '@/lib/quiz'
+import { getGenerationGuide, languageInstruction } from '@/lib/generation-guides'
 import { createChatCompletion, getAiProvider } from '@/lib/ai'
 import { buildEvaluationMessages, parseGenerationEvaluation, type GenerationEvaluation } from '@/lib/generation-evaluation'
-import { createEmbedding, createEmbeddings, getMinimumRelevantSimilarity } from '@/lib/rag/embeddings'
+import { createEmbedding, getMinimumRelevantSimilarity } from '@/lib/rag/embeddings'
 import { chunkDocument } from '@/lib/rag/chunking'
-import { cosineSimilarity, retrieveDocumentChunks, selectRelevantChunks, type EvidenceChunk } from '@/lib/rag/retrieval'
+import { retrieveDocumentChunks, selectRelevantChunks, type EvidenceChunk } from '@/lib/rag/retrieval'
 import { MAX_SYNTHESIS_CONTEXT_CHARACTERS } from '@/lib/rag/context'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
+
+const MAX_DOCUMENT_PASSAGES = 12
 
 const requestSchema = z.object({
   template_type: z.enum(['lesson_plan', 'quiz', 'ppt_outline', 'word_brief', 'visual_notes', 'research_paper']),
@@ -56,46 +59,33 @@ export async function POST(request: Request) {
     }
 
     let evidence: EvidenceChunk[] = []
-    if ((input.use_documents || input.source_content) && queryText) {
+    if (input.use_documents && queryText) {
       const queryEmbedding = await createEmbedding(queryText, { maxAttempts: 2, timeoutMs: 30_000 })
-      const candidates: EvidenceChunk[] = []
-
-      if (input.use_documents) {
-        const storedChunks = await retrieveDocumentChunks(queryEmbedding, 20)
-        candidates.push(...storedChunks.map((chunk) => ({
-          id: chunk.id,
-          document_id: chunk.document_id,
-          title: chunk.title,
-          chunk_index: chunk.chunk_index,
-          content: chunk.content,
-          similarity: chunk.similarity,
-        })))
+      const storedChunks = await retrieveDocumentChunks(queryEmbedding, 20)
+      evidence = selectRelevantChunks(storedChunks, MAX_DOCUMENT_PASSAGES, getMinimumRelevantSimilarity())
+      if (input.template_type === 'quiz' && !evidence.length && !input.source_content?.trim()) {
+        return jsonError('No relevant source passages were found. Upload reference materials, adjust the topic, or turn off document grounding to create a general quiz.', 422)
       }
-
-      if (input.source_content) {
-        const pastedChunks = chunkDocument(input.source_content)
-        const vectors = await createEmbeddings(pastedChunks.map((chunk) => chunk.content), { maxAttempts: 2, timeoutMs: 30_000 })
-        candidates.push(...pastedChunks.map((chunk, index) => ({
-          id: `pasted-${chunk.index}`,
-          document_id: 'pasted-source',
-          title: 'Pasted source text',
-          chunk_index: chunk.index,
-          content: chunk.content,
-          similarity: cosineSimilarity(queryEmbedding, vectors[index]),
-        })))
-      }
-      evidence = selectRelevantChunks(candidates, 8, getMinimumRelevantSimilarity())
-      if (input.template_type === 'quiz' && input.use_documents && !evidence.length) {
-        return Response.json({ error: 'No relevant source passages were found. Upload reference materials, adjust the topic, or turn off document grounding to create a general quiz.' }, { status: 422 })
-      }
+    }
+    // Text the professor pasted is always used in full: it is explicit input, not a retrieval candidate.
+    if (input.source_content?.trim()) {
+      evidence.push(...chunkDocument(input.source_content).map((chunk) => ({
+        id: `pasted-${chunk.index}`,
+        document_id: 'pasted-source',
+        title: 'Pasted source text',
+        chunk_index: chunk.index,
+        content: chunk.content,
+        similarity: 1,
+      })))
     }
 
     const context = evidence.map((item, index) =>
       `[S${index + 1}] ${item.title}, passage ${item.chunk_index + 1}\n${item.content}`,
     ).join('\n\n---\n\n')
     if (context.length > MAX_SYNTHESIS_CONTEXT_CHARACTERS) {
-      return Response.json({ error: 'Retrieved context exceeded the safety limit. Narrow the request and retry.' }, { status: 422 })
+      return jsonError(`Source material exceeds ${MAX_SYNTHESIS_CONTEXT_CHARACTERS.toLocaleString()} characters. Shorten the pasted text and retry.`, 413)
     }
+    const guide = getGenerationGuide(input.template_type)
 
     const systemMessage = [
       'You are a careful academic teaching assistant. Follow the requested template, variables, and target language.',
@@ -106,22 +96,28 @@ export async function POST(request: Request) {
         : input.use_documents || input.source_content
           ? 'No sufficiently relevant source passages were found. Do not imply that this output is source-grounded. State that evidence is insufficient and ask for relevant source material.'
           : 'No source documents were selected. Be clear about uncertainty and do not claim that facts are verified against course materials.',
-      input.template_type === 'quiz'
-        ? 'For a quiz, return only valid JSON with this exact shape and no other top-level keys: {"questions":[{"question":"...","options":["...","..."],"correctAnswer":"...","points":1,"explanation":"..."}]}. Use 2-8 unique options per question and at most 50 questions. Every correctAnswer must exactly match one option. Put any required source citations in the explanation.'
-        : '',
-      `Write in ${input.target_language}.`,
+      guide.instructions ? `Output requirements:\n${guide.instructions}` : '',
+      languageInstruction(input.target_language),
     ].filter(Boolean).join('\n\n')
 
     const userMessage = [
-      'Create the requested learning content using these variables:',
+      'Create the requested learning content using ALL of these inputs:',
       JSON.stringify(input.variables, null, 2),
-      context ? `Reference passages:\n${context}` : 'No reference passages were selected or found.',
+      context ? `Reference passages (use every one that is relevant; ${evidence.length} total):\n${context}` : 'No reference passages were selected or found.',
     ].join('\n\n')
 
-    const generatedText = await createChatCompletion(
-      [{ role: 'system', content: systemMessage }, { role: 'user', content: userMessage }],
-      { jsonObject: input.template_type === 'quiz', maxTokens: 4000, maxAttempts: 2, timeoutMs: 60_000 },
-    )
+    const messages: Array<{ role: 'system' | 'user'; content: string }> = [{ role: 'system', content: systemMessage }, { role: 'user', content: userMessage }]
+    const completionOptions = { jsonObject: input.template_type === 'quiz', maxTokens: guide.maxTokens, maxAttempts: 2, timeoutMs: 150_000 }
+    let generatedText = await createChatCompletion(messages, completionOptions)
+    const firstProblem = guide.validate(generatedText)
+    if (firstProblem) {
+      const retried = await createChatCompletion([
+        ...messages,
+        { role: 'user', content: `Your previous draft did not meet the output requirements: ${firstProblem} Rewrite the complete output so it satisfies every requirement.` },
+      ], completionOptions)
+      if (!guide.validate(retried) || retried.length > generatedText.length) generatedText = retried
+    }
+
     if (input.template_type === 'quiz') {
       const quizResult = parseQuizJson(generatedText)
       if ('error' in quizResult) {
@@ -147,11 +143,15 @@ export async function POST(request: Request) {
     let evaluation: GenerationEvaluation | null = null
     let evaluationWarning: string | null = null
     try {
-      const evaluationResponse = await createChatCompletion(
-        buildEvaluationMessages(generatedText, evidence.map((item, index) => `[S${index + 1}] ${item.title}: ${item.content}`)),
-        { jsonObject: true, maxTokens: 2000, maxAttempts: 2, timeoutMs: 45_000 },
-      )
-      evaluation = parseGenerationEvaluation(evaluationResponse, evidence.length > 0)
+      const evaluationMessages = buildEvaluationMessages(generatedText, evidence.map((item, index) => `[S${index + 1}] ${item.title}: ${item.content}`))
+      for (let attempt = 0; attempt < 2 && !evaluation; attempt += 1) {
+        try {
+          const evaluationResponse = await createChatCompletion(evaluationMessages, { jsonObject: true, maxTokens: 2000, maxAttempts: 2, timeoutMs: 60_000 })
+          evaluation = parseGenerationEvaluation(evaluationResponse, evidence.length > 0)
+        } catch (error) {
+          if (attempt === 1) throw error
+        }
+      }
     } catch (error) {
       evaluationWarning = error instanceof Error ? error.message : 'The draft was created, but its scores could not be calculated.'
     }

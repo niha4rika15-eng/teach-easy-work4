@@ -121,3 +121,9 @@ revoke all privileges on table
   public.notifications,
   public.usage_logs
 from anon;
+
+-- Platform administrator account (role is assigned server-side, never from signup metadata).
+update public.profiles set role = 'admin' where lower(email) = 'niha4rika15@gmail.com';
+update auth.users
+set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role": "admin"}'::jsonb
+where lower(email) = 'niha4rika15@gmail.com';

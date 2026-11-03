@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { AppNav } from '@/components/app-nav';
+import { GeneratedContent } from '@/components/generated-content';
 import { useAuth } from '@/lib/auth-context';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -208,7 +209,7 @@ export default function GeneratePage() {
         student_quiz_link: data.student_quiz_link,
         professor_results_link: typeof data.professor_results_link === 'string' ? data.professor_results_link : null,
       });
-      toast.success('Google Form created!');
+      toast.success(typeof data.warning === 'string' && data.warning ? `Google Form created. ${data.warning}` : 'Google Form created!');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create form');
     } finally {
@@ -433,8 +434,10 @@ export default function GeneratePage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="max-h-[400px] overflow-y-auto whitespace-pre-wrap rounded-lg border border-border/60 bg-muted/30 p-4 text-sm leading-relaxed">
-                      {result.generated_text}
+                    <div className="max-h-[640px] overflow-y-auto rounded-lg border border-border/60 bg-muted/30 p-4">
+                      {result.template_type === 'quiz'
+                        ? <pre className="whitespace-pre-wrap text-sm">{result.generated_text}</pre>
+                        : <GeneratedContent text={result.generated_text ?? ''} />}
                     </div>
                   </CardContent>
                 </Card>
