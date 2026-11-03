@@ -12,8 +12,9 @@ test('PDF exporter creates a valid PDF for Latin text', async () => {
   assert.equal(output.subarray(0, 4).toString('ascii'), '%PDF')
 })
 
-test('PDF exporter clearly rejects unsupported non-Latin characters', async () => {
-  assert.throws(() => createPdf('Notes', 'हिंदी'), /Use DOCX or PPTX/)
+test('PDF exporter supports Hindi text', async () => {
+  const pdf = await createPdf('Notes', 'हिंदी')
+  assert.equal(pdf.subarray(0, 5).toString('latin1'), '%PDF-')
 })
 
 test('PPTX exporter creates a valid zipped presentation', async () => {

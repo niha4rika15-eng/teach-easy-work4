@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { AppNav } from '@/components/app-nav';
-import { GeneratedContent } from '@/components/generated-content';
+import { GeneratedContent, renderMermaidPng } from '@/components/generated-content';
+import { extractMermaidBlocks } from '@/lib/content-segments';
 import { useAuth } from '@/lib/auth-context';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -220,12 +221,14 @@ export default function GeneratePage() {
   async function handleExport(format: 'pdf' | 'docx' | 'pptx') {
     if (!result) return;
 
+    const toastId = toast.loading('Preparing download with diagrams and images...');
     try {
-      const params = new URLSearchParams({
-        generation_id: result.id,
-        format,
+      const diagrams = await Promise.all(extractMermaidBlocks(result.generated_text ?? '').map((code) => renderMermaidPng(code)));
+      const response = await fetch('/api/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ generation_id: result.id, format, diagrams }),
       });
-      const response = await fetch(`/api/export?${params.toString()}`);
       if (!response.ok) {
         throw await readErrorResponse(response, 'Export failed');
       }
@@ -239,8 +242,9 @@ export default function GeneratePage() {
       link.click();
       link.remove();
       window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 0);
+      toast.success('Download ready', { id: toastId });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Export failed');
+      toast.error(err instanceof Error ? err.message : 'Export failed', { id: toastId });
     }
   }
 
@@ -450,13 +454,13 @@ export default function GeneratePage() {
                       Create Google Form
                     </Button>
                   )}
-                  <Button variant="outline" onClick={() => handleExport('pdf')} className="gap-2">
+                  <Button variant="outline" data-testid="export-pdf-button" onClick={() => handleExport('pdf')} className="gap-2">
                     <Download className="h-4 w-4" /> PDF
                   </Button>
-                  <Button variant="outline" onClick={() => handleExport('docx')} className="gap-2">
+                  <Button variant="outline" data-testid="export-docx-button" onClick={() => handleExport('docx')} className="gap-2">
                     <Download className="h-4 w-4" /> DOCX
                   </Button>
-                  <Button variant="outline" onClick={() => handleExport('pptx')} className="gap-2">
+                  <Button variant="outline" data-testid="export-pptx-button" onClick={() => handleExport('pptx')} className="gap-2">
                     <Download className="h-4 w-4" /> PPTX
                   </Button>
                 </div>

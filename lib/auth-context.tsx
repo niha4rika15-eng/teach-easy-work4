@@ -100,7 +100,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signUp(email: string, password: string, fullName: string, role: string, institution?: string) {
-    const safeRole = role.toLowerCase() === 'student' ? 'student' : 'professor';
+    const requested = role.toLowerCase();
+    const safeRole = requested === 'admin' || requested === 'professor' ? requested : 'student';
     try {
       const { error } = await supabase.auth.signUp({
         email,

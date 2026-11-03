@@ -4,6 +4,8 @@ const nextConfig = {
   // pdf-parse ships a pdf.js worker and a native canvas binding; keep them out of the bundle so
   // serverless functions load them from node_modules instead of crashing at module evaluation.
   serverExternalPackages: ['pdf-parse', 'pdfjs-dist', '@napi-rs/canvas', 'mammoth'],
+  // Embedded Noto fonts let PDF exports render Hindi, Marathi, Bengali, and Telugu.
+  outputFileTracingIncludes: { '/api/export': ['./lib/fonts/**/*'] },
   // The Vercel project stores Supabase credentials under lowercase names; expose them
   // under the NEXT_PUBLIC_* names the app reads (both are public, browser-safe values).
   env: {

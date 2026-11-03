@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { GraduationCap, Mail, Lock, User, Building2, ArrowRight, Briefcase } from 'lucide-react';
+import { GraduationCap, Mail, Lock, User, Building2, ArrowRight, Briefcase, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/client';
 import { getDashboardPath } from '@/lib/types';
@@ -16,6 +16,7 @@ import { getDashboardPath } from '@/lib/types';
 const ROLES = [
   { value: 'student', label: 'Student', icon: GraduationCap, desc: 'Access shared materials' },
   { value: 'professor', label: 'Professor', icon: Briefcase, desc: 'Request educator access' },
+  { value: 'admin', label: 'Admin', icon: ShieldCheck, desc: 'Request administrator access' },
 ] as const;
 
 export default function SignupPage() {
@@ -78,17 +79,19 @@ export default function SignupPage() {
         <Card className="border-border/60 shadow-xl">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl">Create account</CardTitle>
-            <CardDescription>New accounts start with student access. Professor access requires approval by an administrator.</CardDescription>
+            <CardDescription>New accounts start with student access. Professor and admin access are granted only after approval by an existing administrator.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label>Choose your role</Label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {(ROLES || []).map((r) => (
                     <button
                       key={r.value}
                       type="button"
+                      data-testid={`signup-role-${r.value}`}
+                      aria-pressed={role === r.value}
                       onClick={() => setRole(r.value)}
                       className={`flex flex-col items-center gap-1.5 rounded-lg border-2 p-3 transition-all ${role === r.value ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/30'}`}
                     >

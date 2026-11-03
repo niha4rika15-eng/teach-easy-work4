@@ -72,6 +72,11 @@ update public.profiles set role = lower(role) where role is distinct from lower(
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles add constraint profiles_role_check check (role in ('admin', 'professor', 'student'));
 
+-- Signup may only REQUEST elevated access; an existing admin approves it with admin_set_role().
+alter table public.profiles add column if not exists requested_role text;
+alter table public.profiles drop constraint if exists profiles_requested_role_check;
+alter table public.profiles add constraint profiles_requested_role_check check (requested_role is null or requested_role in ('professor', 'admin'));
+
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -79,13 +84,14 @@ security definer
 set search_path = public, auth
 as $$
 begin
-  insert into public.profiles (id, email, full_name, institution, role)
+  insert into public.profiles (id, email, full_name, institution, role, requested_role)
   values (
     new.id,
     coalesce(new.email, ''),
     coalesce(nullif(new.raw_user_meta_data ->> 'full_name', ''), split_part(coalesce(new.email, ''), '@', 1)),
     nullif(new.raw_user_meta_data ->> 'institution', ''),
-    'student'
+    'student',
+    case when new.raw_user_meta_data ->> 'requested_role' in ('professor', 'admin') then new.raw_user_meta_data ->> 'requested_role' end
   )
   on conflict (id) do nothing;
 
@@ -127,3 +133,26 @@ update public.profiles set role = 'admin' where lower(email) = 'niha4rika15@gmai
 update auth.users
 set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role": "admin"}'::jsonb
 where lower(email) = 'niha4rika15@gmail.com';
+
+-- Admin-only role management used by the Users page.
+create or replace function public.admin_set_role(target_user uuid, new_role text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Only administrators can change roles' using errcode = '42501';
+  end if;
+  if new_role not in ('student', 'professor', 'admin') then
+    raise exception 'Invalid role %', new_role using errcode = '22023';
+  end if;
+  if target_user = auth.uid() and new_role <> 'admin' then
+    raise exception 'Administrators cannot remove their own admin role' using errcode = '42501';
+  end if;
+  update public.profiles set role = new_role, requested_role = null where id = target_user;
+end;
+$$;
+revoke all on function public.admin_set_role(uuid, text) from public, anon;
+grant execute on function public.admin_set_role(uuid, text) to authenticated;

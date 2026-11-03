@@ -2,13 +2,12 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
-import { getDashboardPath } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { GraduationCap, FileText, ShieldCheck, Languages, BarChart3, Bell, Sparkles, ArrowRight, Brain, CheckCircle2 } from 'lucide-react';
 
 export default function Home() {
-  const { user, profile, authError } = useAuth();
+  const { authError } = useAuth();
 
   const features = [
     { icon: FileText, title: 'Prompt Template Engine', desc: 'Built-in templates for PPTs, study notes, visual notes with diagrams, and quizzes.' },
@@ -31,22 +30,12 @@ export default function Home() {
             <span className="text-xl font-bold tracking-tight">Teach Easy</span>
           </div>
           <div className="flex items-center gap-3">
-            {user ? (
-              <Link href={getDashboardPath(profile?.role)}>
-                <Button size="sm" className="gap-2">
-                  Go to Dashboard <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
-            ) : (
-              <>
-                <Link href="/login">
-                  <Button variant="ghost" size="sm">Sign In</Button>
-                </Link>
-                <Link href="/signup">
-                  <Button size="sm">Get Started</Button>
-                </Link>
-              </>
-            )}
+            <Link href="/login">
+              <Button variant="ghost" size="sm" data-testid="nav-sign-in-button">Sign In</Button>
+            </Link>
+            <Link href="/signup">
+              <Button size="sm" data-testid="nav-get-started-button">Get Started</Button>
+            </Link>
           </div>
         </div>
       </nav>
@@ -71,8 +60,7 @@ export default function Home() {
             A platform for professors and students to create multilingual learning content, review source citations, and share course materials.
           </p>
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row animate-slide-up">
-            {!user && (
-              <>
+            <>
                 <Link href="/signup">
                   <Button size="lg" className="gap-2 px-8">
                     Start Creating <ArrowRight className="h-4 w-4" />
@@ -81,8 +69,7 @@ export default function Home() {
                 <Link href="/login">
                   <Button size="lg" variant="outline" className="px-8">Sign In</Button>
                 </Link>
-              </>
-            )}
+            </>
           </div>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm text-muted-foreground">
             {(['Source citations', 'AI rubric estimates', '5 Languages', 'Google Forms publishing'] || []).map((item) => (

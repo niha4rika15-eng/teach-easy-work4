@@ -4,7 +4,7 @@ import { getGenerationGuide, languageInstruction } from '../../lib/generation-gu
 import { CORE_PROMPT_TEMPLATES } from '../../lib/prompt-templates'
 import { buildEvaluationMessages, parseGenerationEvaluation } from '../../lib/generation-evaluation'
 import { parseSlideDeck } from '../../lib/exporters'
-import { splitGeneratedContent } from '../../components/generated-content'
+import { splitGeneratedContent } from '../../lib/content-segments'
 
 const source = '[S1] Biology notes, passage 1\nPhotosynthesis occurs in chloroplasts. Light-dependent reactions in the thylakoid membranes split water, release oxygen, and produce ATP and NADPH. The Calvin cycle in the stroma uses ATP and NADPH to fix carbon dioxide into glucose via the enzyme RuBisCO.'
 

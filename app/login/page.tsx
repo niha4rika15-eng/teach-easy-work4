@@ -1,30 +1,38 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { GraduationCap, Mail, Lock, ArrowRight } from 'lucide-react';
+import { GraduationCap, Mail, Lock, ArrowRight, Briefcase, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/client';
 import { getDashboardPath } from '@/lib/types';
 
-export default function LoginPage() {
-  const { signIn, user, profile, loading: authLoading } = useAuth();
+const SIGN_IN_ROLES = [
+  { value: 'student', label: 'Student', icon: GraduationCap },
+  { value: 'professor', label: 'Professor', icon: Briefcase },
+  { value: 'admin', label: 'Admin', icon: ShieldCheck },
+] as const;
+
+type SignInRole = (typeof SIGN_IN_ROLES)[number]['value'];
+
+function safeNextPath(value: string | null, role: string) {
+  return value && value.startsWith(`/${role}`) && !value.startsWith('//') ? value : getDashboardPath(role);
+}
+
+function LoginForm() {
+  const { signIn } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [role, setRole] = useState<SignInRole>('student');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!authLoading && user && profile) {
-      router.replace(getDashboardPath(profile.role));
-    }
-  }, [authLoading, profile, router, user]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,11 +56,21 @@ export default function LoginPage() {
         .eq('id', session.user.id)
         .maybeSingle();
       if (profileError || !profile) {
+        await supabase.auth.signOut();
         toast.error(profileError?.message ?? 'Your account profile is not available yet.');
         return;
       }
 
-      router.replace(getDashboardPath(profile.role));
+      // The chosen role must match the role granted in the database; it never grants access by itself.
+      const actualRole = String(profile.role ?? '').toLowerCase();
+      if (actualRole !== role) {
+        await supabase.auth.signOut();
+        const label = SIGN_IN_ROLES.find((item) => item.value === role)?.label ?? role;
+        toast.error(`This account does not have ${label} access. Choose the role assigned to your account.`);
+        return;
+      }
+
+      router.replace(safeNextPath(searchParams.get('next'), actualRole));
       router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to sign in.');
@@ -61,6 +79,49 @@ export default function LoginPage() {
     }
   }
 
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label>Sign in as</Label>
+        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Sign in as">
+          {SIGN_IN_ROLES.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              role="radio"
+              aria-checked={role === item.value}
+              data-testid={`login-role-${item.value}`}
+              onClick={() => setRole(item.value)}
+              className={`flex flex-col items-center gap-1.5 rounded-lg border-2 p-3 transition-colors ${role === item.value ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/30'}`}
+            >
+              <item.icon className={`h-5 w-5 ${role === item.value ? 'text-primary' : 'text-muted-foreground'}`} />
+              <span className="text-xs font-medium">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="email">Email</Label>
+        <div className="relative">
+          <Mail className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
+          <Input id="email" data-testid="login-email-input" type="email" placeholder="you@example.com" className="pl-10" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="password">Password</Label>
+        <div className="relative">
+          <Lock className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
+          <Input id="password" data-testid="login-password-input" type="password" placeholder="••••••••" className="pl-10" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        </div>
+      </div>
+      <Button type="submit" data-testid="login-submit-button" className="w-full gap-2" disabled={loading}>
+        {loading ? 'Signing in...' : <>Sign In <ArrowRight className="h-4 w-4" /></>}
+      </Button>
+    </form>
+  );
+}
+
+export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-background to-card px-4">
       <div className="w-full max-w-md animate-scale-in">
@@ -75,28 +136,12 @@ export default function LoginPage() {
         <Card className="border-border/60 shadow-xl">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl">Sign in</CardTitle>
-            <CardDescription>Enter your credentials to access your dashboard</CardDescription>
+            <CardDescription>Choose your role and enter your credentials. Dashboards open only after you sign in.</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-                  <Input id="email" data-testid="login-email-input" type="email" placeholder="you@example.com" className="pl-10" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-                  <Input id="password" data-testid="login-password-input" type="password" placeholder="••••••••" className="pl-10" value={password} onChange={(e) => setPassword(e.target.value)} required />
-                </div>
-              </div>
-              <Button type="submit" data-testid="login-submit-button" className="w-full gap-2" disabled={loading}>
-                {loading ? 'Signing in...' : <>Sign In <ArrowRight className="h-4 w-4" /></>}
-              </Button>
-            </form>
+            <Suspense fallback={null}>
+              <LoginForm />
+            </Suspense>
           </CardContent>
           <CardFooter className="justify-center">
             <p className="text-sm text-muted-foreground">
