@@ -20,10 +20,20 @@
    - Prompt templates: professors+admins CRUD; students read.
    - Generations: owner professor CRUD; admin read all.
    - Quiz forms: owner professor CRUD; admin read all.
-   - Shared materials: professor owner CRUD; admin read all; students read shared.
+   - Shared materials: professor owner CRUD; admin read all; students read only materials shared with everyone (empty student_ids) or with them.
    - Notifications: owner student CRUD; admin read all.
    - Usage logs: admin read all; any authenticated insert.
 */
+
+-- Existing projects created by an earlier Teach Easy prototype may already contain tables with the
+-- same names but an incompatible shape. Preserve them under *_legacy names instead of failing.
+DO $$
+BEGIN
+  IF to_regclass('public.usage_logs') IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'usage_logs' AND column_name = 'event_type') THEN
+    ALTER TABLE public.usage_logs RENAME TO usage_logs_legacy;
+  END IF;
+END $$;
 
 -- profiles
 CREATE TABLE IF NOT EXISTS profiles (
@@ -34,6 +44,11 @@ CREATE TABLE IF NOT EXISTS profiles (
   institution text,
   created_at timestamptz DEFAULT now()
 );
+
+-- Bring a pre-existing profiles table up to the shape this app uses.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS institution text;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+UPDATE profiles SET role = lower(role) WHERE role IS DISTINCT FROM lower(role);
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
@@ -72,11 +87,13 @@ CREATE POLICY "insert_templates" ON prompt_templates FOR INSERT
 
 DROP POLICY IF EXISTS "update_templates" ON prompt_templates;
 CREATE POLICY "update_templates" ON prompt_templates FOR UPDATE
-  TO authenticated USING (EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role IN ('admin', 'professor')));
+  TO authenticated
+  USING (created_by = auth.uid() OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'))
+  WITH CHECK (created_by = auth.uid() OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'));
 
 DROP POLICY IF EXISTS "delete_templates" ON prompt_templates;
 CREATE POLICY "delete_templates" ON prompt_templates FOR DELETE
-  TO authenticated USING (EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role IN ('admin', 'professor')));
+  TO authenticated USING (created_by = auth.uid() OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'));
 
 -- generations
 CREATE TABLE IF NOT EXISTS generations (
@@ -152,7 +169,7 @@ CREATE TABLE IF NOT EXISTS shared_materials (
   file_url text,
   file_type text,
   subject text,
-  student_ids jsonb DEFAULT '[]'::jsonb,
+  student_ids jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(student_ids) = 'array'),
   created_at timestamptz DEFAULT now()
 );
 
@@ -162,17 +179,27 @@ DROP POLICY IF EXISTS "select_materials" ON shared_materials;
 CREATE POLICY "select_materials" ON shared_materials FOR SELECT
   TO authenticated USING (
     auth.uid() = professor_id
-    OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'student')
     OR EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin')
+    OR (
+      EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'student')
+      AND (jsonb_array_length(coalesce(student_ids, '[]'::jsonb)) = 0 OR student_ids ? auth.uid()::text)
+    )
   );
 
 DROP POLICY IF EXISTS "insert_materials" ON shared_materials;
 CREATE POLICY "insert_materials" ON shared_materials FOR INSERT
-  TO authenticated WITH CHECK (EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role IN ('admin', 'professor')));
+  TO authenticated WITH CHECK (
+    auth.uid() = professor_id
+    AND EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role IN ('admin', 'professor'))
+    AND (file_url IS NULL OR file_url ~* '^https://' OR split_part(file_url, '/', 1) = auth.uid()::text)
+  );
 
 DROP POLICY IF EXISTS "update_materials" ON shared_materials;
 CREATE POLICY "update_materials" ON shared_materials FOR UPDATE
-  TO authenticated USING (auth.uid() = professor_id) WITH CHECK (auth.uid() = professor_id);
+  TO authenticated USING (auth.uid() = professor_id) WITH CHECK (
+    auth.uid() = professor_id
+    AND (file_url IS NULL OR file_url ~* '^https://' OR split_part(file_url, '/', 1) = auth.uid()::text)
+  );
 
 DROP POLICY IF EXISTS "delete_materials" ON shared_materials;
 CREATE POLICY "delete_materials" ON shared_materials FOR DELETE

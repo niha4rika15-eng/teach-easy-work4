@@ -8,20 +8,24 @@ export async function proxy(request: NextRequest) {
 
   if (!supabaseUrl || !supabaseKey) return response;
 
-  const supabase = createServerClient(supabaseUrl, supabaseKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
+  // A session-refresh failure must never turn a request into an empty 500; route handlers do their own auth.
+  try {
+    const supabase = createServerClient(supabaseUrl, supabaseKey, {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+        },
       },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        response = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
-      },
-    },
-  });
-
-  await supabase.auth.getUser();
+    });
+    await supabase.auth.getUser();
+  } catch (error) {
+    console.error('Session refresh failed in proxy:', error);
+  }
   return response;
 }
 

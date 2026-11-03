@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
+import { jsonError, requireProfessorOrAdmin } from '@/lib/api-auth'
 import { createDocx, createPdf, createPptx } from '@/lib/exporters'
 
 export const runtime = 'nodejs'
@@ -23,27 +23,15 @@ export async function GET(request: Request) {
       return Response.json({ error: 'A valid generation_id and export format are required.' }, { status: 400 })
     }
 
-    const supabase = await createClient()
-    const { data: authData, error: authError } = await supabase.auth.getUser()
-    if (authError || !authData.user) {
-      return Response.json({ error: 'Sign in to export generated content.' }, { status: 401 })
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', authData.user.id)
-      .maybeSingle()
-    if (profileError) throw new Error(`Could not verify the current user role: ${profileError.message}`)
-    if (profile?.role !== 'professor' && profile?.role !== 'admin') {
-      return Response.json({ error: 'Only professors and administrators can export generated content.' }, { status: 403 })
-    }
+    const auth = await requireProfessorOrAdmin('export generated content')
+    if ('response' in auth) return auth.response
+    const { supabase, user } = auth
 
     const { data: generation, error: generationError } = await supabase
       .from('generations')
       .select('id, template_type, target_language, generated_text')
       .eq('id', params.data.generation_id)
-      .eq('user_id', authData.user.id)
+      .eq('user_id', user.id)
       .maybeSingle()
     if (generationError) throw new Error(`Could not load generated content: ${generationError.message}`)
     if (!generation?.generated_text) {
@@ -69,6 +57,6 @@ export async function GET(request: Request) {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unexpected export error.'
-    return Response.json({ error: message }, { status: 500 })
+    return jsonError(message, 500)
   }
 }

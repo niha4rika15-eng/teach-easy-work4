@@ -12,8 +12,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint app components lib api-auth.ts chunking.ts chunking.test.ts embeddings.ts ingestion.ts retrieval.ts context.ts context.test.ts rag.test.ts export.test.ts document-extraction.test.ts template-evaluation.test.ts feature-boundaries.ts proxy.ts",
-    "test": "tsx --test chunking.test.ts context.test.ts rag.test.ts export.test.ts document-extraction.test.ts template-evaluation.test.ts",
+    "lint": "eslint app components lib hooks tests proxy.ts",
+    "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

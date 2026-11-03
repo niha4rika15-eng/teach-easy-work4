@@ -12,21 +12,75 @@ type ChatResponse = {
   error?: { message?: string }
 }
 
-export async function createChatCompletion(messages: ChatMessage[], options: ChatOptions = {}) {
-  const apiKey = process.env.OPENAI_API_KEY ?? process.env.openai_apikey
-  if (!apiKey) throw new Error('OPENAI_API_KEY is not configured on the server.')
+export type AiProvider = 'gemini' | 'openai'
 
-  const model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini'
+// Used only when the primary Gemini model is overloaded (503/429) after retries.
+const GEMINI_FALLBACK_MODELS = ['gemini-3.5-flash', 'gemini-3-flash-preview']
+
+// Gemini is preferred when configured; OpenAI remains supported.
+export function getAiProvider(): AiProvider {
+  if (process.env.GEMINI_API_KEY) return 'gemini'
+  if (process.env.OPENAI_API_KEY ?? process.env.openai_apikey) return 'openai'
+  throw new Error('No AI provider is configured. Set GEMINI_API_KEY (or OPENAI_API_KEY) on the server.')
+}
+
+function getChatConfig() {
+  if (getAiProvider() === 'gemini') {
+    return {
+      url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+      apiKey: process.env.GEMINI_API_KEY as string,
+      models: [process.env.GEMINI_MODEL ?? 'gemini-3.8-flash', ...GEMINI_FALLBACK_MODELS],
+      tokenField: 'max_tokens',
+      extra: { reasoning_effort: 'low' },
+      label: 'Gemini',
+    }
+  }
+  return {
+    url: 'https://api.openai.com/v1/chat/completions',
+    apiKey: (process.env.OPENAI_API_KEY ?? process.env.openai_apikey) as string,
+    model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
+    tokenField: 'max_completion_tokens',
+    label: 'OpenAI',
+  }
+}
+
+function extractProviderMessage(detail: string) {
+  try {
+    const parsed = JSON.parse(detail) as ChatResponse | Array<ChatResponse>
+    const first = Array.isArray(parsed) ? parsed[0] : parsed
+    return first?.error?.message ?? detail
+  } catch {
+    return detail
+  }
+}
+
+export async function createChatCompletion(messages: ChatMessage[], options: ChatOptions = {}) {
+  const config = getChatConfig()
+  const models = Array.from(new Set(config.models))
+  let lastError: Error | null = null
+  for (const model of models) {
+    try {
+      return await requestChat(config, model, messages, options)
+    } catch (error) {
+      lastError = error as Error
+      if (!(error as { retryable?: boolean }).retryable) throw error
+    }
+  }
+  throw lastError ?? new Error('Language model retries were exhausted.')
+}
+
+async function requestChat(config: ReturnType<typeof getChatConfig>, model: string, messages: ChatMessage[], options: ChatOptions) {
   const maxAttempts = options.maxAttempts ?? 3
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch(config.url, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
         messages,
         temperature: 0.2,
-        max_completion_tokens: options.maxTokens ?? 4000,
+        [config.tokenField]: options.maxTokens ?? 4000,
+        ...config.extra,
         ...(options.jsonObject ? { response_format: { type: 'json_object' } } : {}),
       }),
       cache: 'no-store',
@@ -35,25 +89,21 @@ export async function createChatCompletion(messages: ChatMessage[], options: Cha
 
     if (response.ok) {
       const payload = await response.json() as ChatResponse
-      const content = payload.choices?.[0]?.message?.content?.trim()
+      let content = payload.choices?.[0]?.message?.content?.trim()
       if (!content) throw new Error('The language model returned an empty answer.')
+      if (options.jsonObject) content = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
       return content
     }
 
     const detail = await response.text()
     const retryable = response.status === 429 || response.status >= 500
     if (!retryable || attempt === maxAttempts - 1) {
-      let providerMessage = detail
-      try {
-        const parsed = JSON.parse(detail) as ChatResponse
-        providerMessage = parsed.error?.message ?? detail
-      } catch {
-        providerMessage = detail
-      }
-      throw new Error(`Language model request failed (${response.status}): ${providerMessage.slice(0, 500)}`)
+      throw Object.assign(
+        new Error(`${config.label} request failed (${response.status}): ${extractProviderMessage(detail).slice(0, 500)}`),
+        { retryable },
+      )
     }
     await new Promise((resolve) => setTimeout(resolve, 750 * 2 ** attempt))
   }
-
   throw new Error('Language model retries were exhausted.')
 }

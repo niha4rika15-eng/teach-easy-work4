@@ -68,20 +68,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      setAuthError(null);
-      if (newSession) {
-        setLoading(true);
-        void fetchProfile(newSession.user.id);
-      } else {
-        setProfile(null);
-        setLoading(false);
-      }
-    });
+    let unsubscribe = () => {};
+    try {
+      const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+        setSession(newSession);
+        setAuthError(null);
+        if (newSession) {
+          setLoading(true);
+          void fetchProfile(newSession.user.id);
+        } else {
+          setProfile(null);
+          setLoading(false);
+        }
+      });
+      unsubscribe = () => listener.subscription.unsubscribe();
+    } catch {
+      // Missing Supabase config: loadSession below reports the error.
+    }
     void loadSession();
 
-    return () => listener.subscription.unsubscribe();
+    return () => unsubscribe();
   }, [fetchProfile]);
 
   async function signIn(email: string, password: string) {
@@ -114,10 +120,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
-    const { error } = await supabase.auth.signOut();
-    setProfile(null);
-    setSession(null);
-    if (error) throw error;
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      setProfile(null);
+      setSession(null);
+    }
   }
 
   return (

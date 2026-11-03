@@ -7,13 +7,14 @@ import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase/client';
 import { Profile, UsageLog, Generation } from '@/lib/types';
+import { averageScore, formatNepScore, NOT_EVALUATED } from '@/lib/scores';
 import { Users, FileText, TrendingUp, Clock, Activity, Brain, Globe, BarChart3 } from 'lucide-react';
 
 interface Metrics {
   totalUsers: number;
   totalGenerations: number;
   totalTimeSaved: number;
-  avgNepScore: number;
+  avgNepScore: number | null;
   featureUsage: Record<string, number>;
   languageDistribution: Record<string, number>;
   roleDistribution: Record<string, number>;
@@ -23,7 +24,7 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [logs, setLogs] = useState<UsageLog[]>([]);
   const [metrics, setMetrics] = useState<Metrics>({
-    totalUsers: 0, totalGenerations: 0, totalTimeSaved: 0, avgNepScore: 0,
+    totalUsers: 0, totalGenerations: 0, totalTimeSaved: 0, avgNepScore: null,
     featureUsage: {}, languageDistribution: {}, roleDistribution: {},
   });
 
@@ -46,8 +47,7 @@ export default function AdminDashboard() {
 
       {
         const totalTimeSaved = safeGenLogs.reduce((sum: number, l: UsageLog) => sum + (l.time_saved_minutes || 0), 0);
-        const nepScores = safeGenerations.filter((g) => g.nep_confidence != null);
-        const avgNep = nepScores.length > 0 ? nepScores.reduce((a, g) => a + (g.nep_confidence ?? 0), 0) / nepScores.length : 0;
+        const avgNep = averageScore(safeGenerations.map((g) => g.nep_confidence));
         const featureUsage: Record<string, number> = {};
         safeGenLogs.forEach((l: UsageLog) => { featureUsage[l.event_type] = (featureUsage[l.event_type] || 0) + 1; });
         const languageDistribution: Record<string, number> = {};
@@ -106,7 +106,7 @@ export default function AdminDashboard() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Estimated NEP Alignment</CardTitle>
               <TrendingUp className="h-4 w-4 text-accent" />
             </CardHeader>
-            <CardContent><div className="text-2xl font-bold text-accent">{metrics.avgNepScore.toFixed(1)}%</div><p className="text-xs text-muted-foreground">AI rubric estimate, not certification</p></CardContent>
+            <CardContent><div className="text-2xl font-bold text-accent">{metrics.avgNepScore == null ? NOT_EVALUATED : formatNepScore(metrics.avgNepScore, 1)}</div><p className="text-xs text-muted-foreground">Model-estimated (0–100), not an official certification</p></CardContent>
           </Card>
         </div>
 

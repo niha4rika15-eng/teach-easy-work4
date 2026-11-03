@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { cosineSimilarity, selectRelevantChunks, type EvidenceChunk } from './retrieval'
+import { cosineSimilarity, selectRelevantChunks, type EvidenceChunk } from '../lib/rag/retrieval'
 
 function chunk(overrides: Partial<EvidenceChunk> & Pick<EvidenceChunk, 'id' | 'document_id' | 'chunk_index' | 'similarity'>): EvidenceChunk {
   return {

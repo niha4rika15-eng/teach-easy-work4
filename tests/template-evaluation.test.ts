@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { CORE_PROMPT_TEMPLATES, withCorePromptTemplates } from './lib/prompt-templates'
-import { parseGenerationEvaluation } from './lib/generation-evaluation'
-import type { PromptTemplate } from './lib/types'
+import { CORE_PROMPT_TEMPLATES, withCorePromptTemplates } from '../lib/prompt-templates'
+import { parseGenerationEvaluation } from '../lib/generation-evaluation'
+import type { PromptTemplate } from '../lib/types'
 
 test('built-in templates always include PPT, notes, visual notes, and quiz', () => {
   const templateTypes = CORE_PROMPT_TEMPLATES.map((template) => template.template_type)

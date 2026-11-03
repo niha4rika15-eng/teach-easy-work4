@@ -13,7 +13,8 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase/client';
 import { PromptTemplate, Generation, LANGUAGES, TEMPLATE_TYPE_LABELS } from '@/lib/types';
-import { withCorePromptTemplates } from '@/lib/prompt-templates';
+import { CORE_PROMPT_TEMPLATES, loadPromptTemplates, withCorePromptTemplates } from '@/lib/prompt-templates';
+import { formatEvidenceRisk, formatNepScore, formatQualityScore, SCORE_DISCLAIMER } from '@/lib/scores';
 import { FileText, Sparkles, Brain, Globe, Download, CheckCircle2, Loader2, ExternalLink, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -98,8 +99,10 @@ async function readErrorResponse(response: Response, failureMessage: string): Pr
 
 export default function GeneratePage() {
   const { profile } = useAuth();
-  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<PromptTemplate | null>(null);
+  const [templates, setTemplates] = useState<PromptTemplate[]>(() => withCorePromptTemplates([]));
+  const [selectedTemplate, setSelectedTemplate] = useState<PromptTemplate | null>(
+    () => CORE_PROMPT_TEMPLATES.find((template) => template.template_type === 'ppt_outline') ?? null,
+  );
   const [language, setLanguage] = useState('English');
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [sourceContent, setSourceContent] = useState('');
@@ -114,9 +117,8 @@ export default function GeneratePage() {
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase.from('prompt_templates').select('*').order('name');
-      if (error) toast.error(`Could not load saved templates; built-in templates remain available. ${error.message}`);
-      const availableTemplates = withCorePromptTemplates((data as PromptTemplate[] | null) ?? []);
+      const { templates: availableTemplates, warning } = await loadPromptTemplates(() => supabase.from('prompt_templates').select('*').order('name'));
+      if (warning) toast.error(`Could not load saved templates; built-in templates remain available. ${warning}`);
       setTemplates(availableTemplates);
       const preferred = availableTemplates.find((template) => template.template_type === 'ppt_outline') ?? availableTemplates[0];
       if (preferred) {
@@ -191,7 +193,7 @@ export default function GeneratePage() {
       const response = await fetch('/api/google/forms-create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ generation_id: result.id, title: `${TEMPLATE_TYPE_LABELS[result.template_type]} Quiz` }),
+        body: JSON.stringify({ generation_id: result.id, title: `${variables.topic?.trim() || TEMPLATE_TYPE_LABELS[result.template_type] || 'Generated'} Quiz` }),
       });
 
       const data = await readJsonResponse(response, 'Failed to create form');
@@ -261,7 +263,7 @@ export default function GeneratePage() {
                 <div className="space-y-2">
                   <Label>Template</Label>
                   <Select onValueChange={handleTemplateChange} value={selectedTemplate?.id}>
-                    <SelectTrigger><SelectValue placeholder="Select a template" /></SelectTrigger>
+                    <SelectTrigger data-testid="template-select"><SelectValue placeholder="Select a template" /></SelectTrigger>
                     <SelectContent>
                       {(templates || []).map((t) => (
                         <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
@@ -331,14 +333,14 @@ export default function GeneratePage() {
                 <Switch id="save-source" checked={saveSource} onCheckedChange={setSaveSource} />
               </div>
               <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/50 p-4">
-                <p className="text-xs text-muted-foreground">Pasted text is sent to OpenAI for this request. Check your provider account’s data-retention settings.</p>
+                <p className="text-xs text-muted-foreground">Pasted text is sent to the configured AI provider (Gemini or OpenAI) for this request. Check your provider account’s data-retention settings.</p>
               </div>
               </CardContent>
             </Card>
 
-            <Button onClick={handleGenerate} disabled={generating} className="w-full gap-2" size="lg">
+            <Button data-testid="generate-button" onClick={handleGenerate} disabled={generating} className="w-full gap-2" size="lg">
               {generating ? (
-                <><Loader2 className="h-4 w-4 animate-spin" /> Generating & Verifying...</>
+                <><Loader2 className="h-4 w-4 animate-spin" /> Generating & estimating scores...</>
               ) : (
                 <><Sparkles className="h-4 w-4" /> Generate Grounded Content</>
               )}
@@ -394,29 +396,31 @@ export default function GeneratePage() {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>AI rubric estimates</CardTitle>
+                    <CardTitle>Model-estimated rubric scores</CardTitle>
                     <CardDescription>Guidance only — not an official NEP assessment or independent fact-check.</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {evaluationWarning ? (
-                      <p role="status" className="text-sm text-amber-700">{evaluationWarning}</p>
-                    ) : (
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        <div className="rounded-lg border p-3">
-                          <p className="text-sm text-muted-foreground">NEP 2020 alignment</p>
-                          <p className="text-xl font-semibold">{result.nep_confidence != null ? `${result.nep_confidence.toFixed(0)}/100` : 'Not evaluated'}</p>
-                        </div>
-                        <div className="rounded-lg border p-3">
-                          <p className="text-sm text-muted-foreground">Evidence risk (higher is riskier)</p>
-                          <p className="text-xl font-semibold">{result.hallucination_index != null ? `${Math.round(result.hallucination_index * 100)}%` : 'No source-based estimate'}</p>
-                        </div>
-                        <div className="rounded-lg border p-3">
-                          <p className="text-sm text-muted-foreground">Content quality</p>
-                          <p className="text-xl font-semibold">{result.quality_rating != null ? `${result.quality_rating.toFixed(0)}/10` : 'Not evaluated'}</p>
-                        </div>
-                      </div>
+                    {evaluationWarning && (
+                      <p role="status" data-testid="evaluation-warning" className="mb-3 text-sm text-amber-700">Scores could not be calculated: {evaluationWarning}</p>
                     )}
-                    <p className="mt-3 text-xs text-muted-foreground">These scores are model-generated estimates. Verify important claims and citations against primary sources.</p>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-lg border p-3">
+                        <p className="text-sm text-muted-foreground">NEP 2020 alignment estimate (0–100)</p>
+                        <p data-testid="score-nep" className="text-xl font-semibold">{formatNepScore(result.nep_confidence)}</p>
+                      </div>
+                      <div className="rounded-lg border p-3">
+                        <p className="text-sm text-muted-foreground">Evidence risk estimate (0–100, higher is riskier)</p>
+                        <p data-testid="score-evidence-risk" className="text-xl font-semibold">{formatEvidenceRisk(result.hallucination_index)}</p>
+                        {result.hallucination_index == null && !evaluationWarning && (
+                          <p className="text-xs text-muted-foreground">Only estimated when source passages were retrieved.</p>
+                        )}
+                      </div>
+                      <div className="rounded-lg border p-3">
+                        <p className="text-sm text-muted-foreground">Content quality estimate (0–10)</p>
+                        <p data-testid="score-quality" className="text-xl font-semibold">{formatQualityScore(result.quality_rating)}</p>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-xs text-muted-foreground">{SCORE_DISCLAIMER} Verify important claims and citations against primary sources.</p>
                   </CardContent>
                 </Card>
 
@@ -438,7 +442,7 @@ export default function GeneratePage() {
                 {/* Actions */}
                 <div className="flex flex-wrap gap-3">
                   {result.template_type === 'quiz' && (
-                    <Button onClick={handleCreateGoogleForm} disabled={creatingForm} className="gap-2">
+                    <Button data-testid="create-google-form-button" onClick={handleCreateGoogleForm} disabled={creatingForm} className="gap-2">
                       {creatingForm ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
                       Create Google Form
                     </Button>

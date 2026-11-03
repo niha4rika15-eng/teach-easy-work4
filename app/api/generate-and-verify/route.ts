@@ -1,11 +1,12 @@
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
-import { createChatCompletion } from '@/lib/ai'
+import { jsonError, requireProfessorOrAdmin } from '@/lib/api-auth'
+import { parseQuizJson } from '@/lib/quiz'
+import { createChatCompletion, getAiProvider } from '@/lib/ai'
 import { buildEvaluationMessages, parseGenerationEvaluation, type GenerationEvaluation } from '@/lib/generation-evaluation'
-import { createEmbedding, createEmbeddings } from '@/embeddings'
-import { chunkDocument } from '@/chunking'
-import { cosineSimilarity, retrieveDocumentChunks, selectRelevantChunks, type EvidenceChunk } from '@/retrieval'
-import { MAX_SYNTHESIS_CONTEXT_CHARACTERS } from '@/context'
+import { createEmbedding, createEmbeddings, getMinimumRelevantSimilarity } from '@/lib/rag/embeddings'
+import { chunkDocument } from '@/lib/rag/chunking'
+import { cosineSimilarity, retrieveDocumentChunks, selectRelevantChunks, type EvidenceChunk } from '@/lib/rag/retrieval'
+import { MAX_SYNTHESIS_CONTEXT_CHARACTERS } from '@/lib/rag/context'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -20,27 +21,10 @@ const requestSchema = z.object({
   save_source: z.boolean().default(false),
 })
 
-async function getProfessor() {
-  const supabase = await createClient()
-  const { data: authData, error: authError } = await supabase.auth.getUser()
-  if (authError || !authData.user) return { response: Response.json({ error: 'Sign in to generate content.' }, { status: 401 }) }
-
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', authData.user.id)
-    .maybeSingle()
-  if (profileError) throw new Error(`Could not verify the current user role: ${profileError.message}`)
-  if (profile?.role !== 'professor' && profile?.role !== 'admin') {
-    return { response: Response.json({ error: 'Only professors and administrators can generate content.' }, { status: 403 }) }
-  }
-  return { supabase, user: authData.user }
-}
-
 export async function POST(request: Request) {
+  const auth = await requireProfessorOrAdmin('generate content')
+  if ('response' in auth) return auth.response
   try {
-    const auth = await getProfessor()
-    if ('response' in auth) return auth.response
 
     let rawInput: unknown
     try {
@@ -100,7 +84,7 @@ export async function POST(request: Request) {
           similarity: cosineSimilarity(queryEmbedding, vectors[index]),
         })))
       }
-      evidence = selectRelevantChunks(candidates)
+      evidence = selectRelevantChunks(candidates, 8, getMinimumRelevantSimilarity())
       if (input.template_type === 'quiz' && input.use_documents && !evidence.length) {
         return Response.json({ error: 'No relevant source passages were found. Upload reference materials, adjust the topic, or turn off document grounding to create a general quiz.' }, { status: 422 })
       }
@@ -123,7 +107,7 @@ export async function POST(request: Request) {
           ? 'No sufficiently relevant source passages were found. Do not imply that this output is source-grounded. State that evidence is insufficient and ask for relevant source material.'
           : 'No source documents were selected. Be clear about uncertainty and do not claim that facts are verified against course materials.',
       input.template_type === 'quiz'
-        ? 'For a quiz, return only valid JSON with this shape: {"questions":[{"question":"...","options":["...","..."],"correctAnswer":"...","points":1,"explanation":"..."}]}. Every correctAnswer must exactly match one option. Put any required source citations in the explanation.'
+        ? 'For a quiz, return only valid JSON with this exact shape and no other top-level keys: {"questions":[{"question":"...","options":["...","..."],"correctAnswer":"...","points":1,"explanation":"..."}]}. Use 2-8 unique options per question and at most 50 questions. Every correctAnswer must exactly match one option. Put any required source citations in the explanation.'
         : '',
       `Write in ${input.target_language}.`,
     ].filter(Boolean).join('\n\n')
@@ -139,23 +123,9 @@ export async function POST(request: Request) {
       { jsonObject: input.template_type === 'quiz', maxTokens: 4000, maxAttempts: 2, timeoutMs: 60_000 },
     )
     if (input.template_type === 'quiz') {
-      let quiz: unknown
-      try {
-        quiz = JSON.parse(generatedText)
-      } catch {
-        return Response.json({ error: 'The model returned invalid quiz JSON. Please retry.' }, { status: 502 })
-      }
-      const quizResult = z.object({
-        questions: z.array(z.object({
-          question: z.string().trim().min(1),
-          options: z.array(z.string().trim().min(1)).min(2),
-          correctAnswer: z.string().trim().min(1),
-          points: z.number().int().min(1).max(100),
-          explanation: z.string().optional(),
-        })).min(1).max(50),
-      }).safeParse(quiz)
-      if (!quizResult.success || quizResult.data.questions.some((question) => !question.options.includes(question.correctAnswer))) {
-        return Response.json({ error: 'The model returned a quiz with invalid questions or answer choices. Please retry.' }, { status: 502 })
+      const quizResult = parseQuizJson(generatedText)
+      if ('error' in quizResult) {
+        return jsonError(`The model returned an invalid quiz (${quizResult.error}). Please retry.`, 502)
       }
     }
 
@@ -179,7 +149,7 @@ export async function POST(request: Request) {
     try {
       const evaluationResponse = await createChatCompletion(
         buildEvaluationMessages(generatedText, evidence.map((item, index) => `[S${index + 1}] ${item.title}: ${item.content}`)),
-        { jsonObject: true, maxTokens: 1000, maxAttempts: 1, timeoutMs: 30_000 },
+        { jsonObject: true, maxTokens: 2000, maxAttempts: 2, timeoutMs: 45_000 },
       )
       evaluation = parseGenerationEvaluation(evaluationResponse, evidence.length > 0)
     } catch (error) {
@@ -210,7 +180,7 @@ export async function POST(request: Request) {
       const { error: evaluationSaveError } = await auth.supabase.from('generation_evaluations').insert({
         generation_id: generation.id,
         user_id: auth.user.id,
-        evaluator: 'openai-rubric-v1',
+        evaluator: `${getAiProvider()}-rubric-v1`,
         nep_compliance_score: evaluation.nep_compliance_score,
         hallucination_score: evaluation.evidence_risk_score,
         quality_score: evaluation.quality_score * 10,
@@ -233,6 +203,7 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unexpected content-generation error.'
-    return Response.json({ error: message }, { status: 500 })
+    console.error('Content generation failed:', error)
+    return jsonError(message, 500)
   }
 }

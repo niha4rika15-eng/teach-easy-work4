@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { chunkDocument } from './chunking'
+import { chunkDocument } from '../lib/rag/chunking'
 
 test('chunkDocument creates overlapping ordered chunks', () => {
   const chunks = chunkDocument('a'.repeat(8500), 4000)

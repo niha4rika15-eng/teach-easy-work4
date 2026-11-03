@@ -11,8 +11,18 @@ import { toast } from 'sonner';
 
 const SHARED_MATERIALS_BUCKET = 'shared-materials'
 
+const SIGNED_LINK_SECONDS = 900
+
 function isStorageObjectPath(value: string) {
-  return !/^https?:\/\//i.test(value)
+  return !/^[a-z][a-z0-9+.-]*:/i.test(value)
+}
+
+function isSafeHttpsUrl(value: string) {
+  try {
+    return new URL(value).protocol === 'https:'
+  } catch {
+    return false
+  }
 }
 
 export default function MaterialsPage() {
@@ -21,17 +31,22 @@ export default function MaterialsPage() {
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase.from('shared_materials').select('*').order('created_at', { ascending: false });
-      if (error) {
-        toast.error(`Could not load shared materials: ${error.message}`)
+      let data: unknown[] | null = null
+      try {
+        const result = await supabase.from('shared_materials').select('*').order('created_at', { ascending: false });
+        if (result.error) throw new Error(result.error.message)
+        data = result.data
+      } catch (error) {
+        toast.error(`Could not load shared materials: ${error instanceof Error ? error.message : 'unknown error'}`)
         return
       }
       const rows = (data as SharedMaterial[]) || []
       const withLinks = await Promise.all(rows.map(async (material) => {
-        if (!material.file_url || !isStorageObjectPath(material.file_url)) return material
+        if (!material.file_url) return material
+        if (!isStorageObjectPath(material.file_url)) return isSafeHttpsUrl(material.file_url) ? material : { ...material, file_url: undefined }
         const { data: signed, error: signedError } = await supabase.storage
           .from(SHARED_MATERIALS_BUCKET)
-          .createSignedUrl(material.file_url, 3600)
+          .createSignedUrl(material.file_url, SIGNED_LINK_SECONDS)
         if (signedError) {
           toast.error(`Could not open ${material.title}: ${signedError.message}`)
           return { ...material, file_url: undefined }

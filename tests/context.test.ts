@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { combineSynthesisContext } from './context'
-import type { RetrievedChunk } from './retrieval'
+import { combineSynthesisContext } from '../lib/rag/context'
+import type { RetrievedChunk } from '../lib/rag/retrieval'
 
 const sourceChunk: RetrievedChunk = {
   id: 'chunk-1',

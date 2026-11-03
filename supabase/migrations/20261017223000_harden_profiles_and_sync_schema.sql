@@ -17,6 +17,17 @@ $$;
 revoke all on function public.is_admin() from public, anon;
 grant execute on function public.is_admin() to authenticated;
 
+-- Remove every pre-existing profiles policy (including legacy public-read ones) before defining ours.
+do $$
+declare
+  pol record;
+begin
+  for pol in select policyname from pg_policies where schemaname = 'public' and tablename = 'profiles' loop
+    execute format('drop policy if exists %I on public.profiles', pol.policyname);
+  end loop;
+end $$;
+
+alter table public.profiles enable row level security;
 drop policy if exists profiles_select_policy on public.profiles;
 drop policy if exists profiles_insert_policy on public.profiles;
 drop policy if exists profiles_update_policy on public.profiles;
@@ -40,6 +51,26 @@ grant update (
   full_name,
   institution
 ) on table public.profiles to authenticated;
+
+-- Earlier prototypes may have extra NOT NULL profile columns; relax those so the signup trigger
+-- (which writes only id, email, full_name, institution, role) can never fail.
+do $$
+declare
+  col record;
+begin
+  for col in
+    select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'profiles'
+      and is_nullable = 'NO' and column_default is null
+      and column_name not in ('id', 'email', 'full_name', 'role')
+  loop
+    execute format('alter table public.profiles alter column %I drop not null', col.column_name);
+  end loop;
+end $$;
+
+update public.profiles set role = lower(role) where role is distinct from lower(role);
+alter table public.profiles drop constraint if exists profiles_role_check;
+alter table public.profiles add constraint profiles_role_check check (role in ('admin', 'professor', 'student'));
 
 create or replace function public.handle_new_user()
 returns trigger

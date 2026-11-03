@@ -13,14 +13,14 @@ export const FEATURE_BOUNDARIES: readonly FeatureBoundary[] = [
     key: 'rag',
     label: 'Research-grounded generation',
     status: 'requires-configuration',
-    description: 'Semantic retrieval, upload, ingestion, and citation display are implemented. Runtime use requires the RAG migrations, professor permissions, and server-side OpenAI credentials.',
-    nextStep: 'Apply the reviewed Supabase migrations, configure OpenAI in Vercel, then upload and test a source document.',
+    description: 'Semantic retrieval, upload, ingestion, and citation display are implemented. Runtime use requires the RAG migrations, professor permissions, and server-side Gemini (or OpenAI) credentials.',
+    nextStep: 'Apply the reviewed Supabase migrations, configure GEMINI_API_KEY in Vercel, then upload and test a source document.',
   },
   {
     key: 'embeddings',
     label: 'Semantic search and embeddings',
     status: 'requires-configuration',
-    description: 'Documents and queries use OpenAI text-embedding-3-small vectors and authenticated pgvector cosine search.',
+    description: 'Documents and queries use 1,536-dimension gemini-embedding-001 (or OpenAI text-embedding-3-small) vectors and authenticated pgvector cosine search.',
     nextStep: 'Ensure the vector extension and match_document_chunks function from the RAG migration are present in Supabase.',
   },
   {
@@ -42,7 +42,7 @@ export const FEATURE_BOUNDARIES: readonly FeatureBoundary[] = [
     label: 'Evaluation and score persistence',
     status: 'requires-configuration',
     description: 'An LLM rubric estimates NEP 2020 alignment and content quality; source-based evidence risk is estimated only when passages are retrieved. These are not certifications or independent fact-checks.',
-    nextStep: 'Configure the server-side OpenAI key; review generated scores against primary sources and the evaluation rubric.',
+    nextStep: 'Configure the server-side Gemini or OpenAI key; review generated scores against primary sources and the evaluation rubric.',
   },
   {
     key: 'notifications',

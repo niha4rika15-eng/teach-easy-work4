@@ -6,6 +6,18 @@ create extension if not exists vector with schema extensions;
 alter table public.generations
   add column if not exists source_citations jsonb not null default '[]'::jsonb;
 
+-- Preserve an incompatible professor_documents table from an earlier prototype.
+do $$
+begin
+  if to_regclass('public.professor_documents') is not null
+     and not exists (
+       select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'professor_documents' and column_name = 'content_hash'
+     ) then
+    alter table public.professor_documents rename to professor_documents_legacy;
+  end if;
+end $$;
+
 create table if not exists public.professor_documents (
   id uuid primary key default gen_random_uuid(),
   professor_id uuid not null references public.profiles(id) on delete cascade,

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase/client';
 import { FileText, Brain, BarChart3, ArrowRight, TrendingUp, Globe } from 'lucide-react';
 import { Generation, QuizForm, TEMPLATE_TYPE_LABELS } from '@/lib/types';
+import { averageScore, formatNepScore, formatQualityScore, NOT_EVALUATED } from '@/lib/scores';
 
 export default function ProfessorDashboard() {
   const { profile } = useAuth();
@@ -33,10 +34,8 @@ export default function ProfessorDashboard() {
       setQuizzes((qs as QuizForm[]) || []);
       setIsLoading(false);
 
-      const nepScores = (gens ?? []).filter((g: Generation) => g.nep_confidence != null);
-      const qualityScores = (gens ?? []).filter((g: Generation) => g.quality_rating != null);
-      const avgNep = nepScores.length ? nepScores.reduce((sum: number, generation: Generation) => sum + (generation.nep_confidence ?? 0), 0) / nepScores.length : null;
-      const avgQuality = qualityScores.length ? qualityScores.reduce((sum: number, generation: Generation) => sum + (generation.quality_rating ?? 0), 0) / qualityScores.length : null;
+      const avgNep = averageScore((gens ?? []).map((g: Generation) => g.nep_confidence));
+      const avgQuality = averageScore((gens ?? []).map((g: Generation) => g.quality_rating));
       setStats({
         total: generationCountResult.count ?? (gens ?? []).length,
         avgNep,
@@ -68,14 +67,14 @@ export default function ProfessorDashboard() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Recent NEP Alignment Estimate</CardTitle>
               <TrendingUp className="h-4 w-4 text-accent" />
             </CardHeader>
-            <CardContent><div className="text-2xl font-bold text-accent">{stats.avgNep == null ? '—' : `${stats.avgNep.toFixed(1)}%`}</div><p className="text-xs text-muted-foreground">AI rubric estimate, not certification</p></CardContent>
+            <CardContent><div className="text-2xl font-bold text-accent">{stats.avgNep == null ? NOT_EVALUATED : formatNepScore(stats.avgNep, 1)}</div><p className="text-xs text-muted-foreground">Model-estimated (0–100), not an official certification</p></CardContent>
           </Card>
           <Card className="animate-slide-up">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Recent Content Quality Estimate</CardTitle>
               <Brain className="h-4 w-4 text-primary" />
             </CardHeader>
-            <CardContent><div className="text-2xl font-bold">{stats.avgQuality == null ? '—' : `${stats.avgQuality.toFixed(1)}/10`}</div><p className="text-xs text-muted-foreground">AI rubric estimate</p></CardContent>
+            <CardContent><div className="text-2xl font-bold">{stats.avgQuality == null ? NOT_EVALUATED : formatQualityScore(stats.avgQuality, 1)}</div><p className="text-xs text-muted-foreground">Model-estimated (0–10)</p></CardContent>
           </Card>
           <Card className="animate-slide-up">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -162,12 +161,10 @@ export default function ProfessorDashboard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
-                      {gen.nep_confidence != null && (
-                        <div className="flex items-center gap-1.5">
-                          <TrendingUp className="h-4 w-4 text-accent" />
-                          <span className="text-sm font-medium">{gen.nep_confidence.toFixed(1)}%</span>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1.5" title="Model-estimated NEP 2020 alignment">
+                        <TrendingUp className="h-4 w-4 text-accent" />
+                        <span className="text-sm font-medium">NEP est. {formatNepScore(gen.nep_confidence)}</span>
+                      </div>
                       <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium capitalize">{gen.status}</span>
                     </div>
                   </CardContent>

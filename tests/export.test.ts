@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createDocx, createPdf, createPptx } from './lib/exporters'
+import { createDocx, createPdf, createPptx } from '../lib/exporters'
 
 test('DOCX exporter creates a valid zipped document', async () => {
   const output = await createDocx('Lesson notes', '# Key idea\n- First point')

@@ -16,8 +16,18 @@ import { toast } from 'sonner';
 const SHARED_MATERIALS_BUCKET = 'shared-materials'
 const MAX_SHARED_MATERIAL_SIZE = 25 * 1024 * 1024
 
+const SIGNED_LINK_SECONDS = 900
+
 function isStorageObjectPath(value: string) {
-  return !/^https?:\/\//i.test(value)
+  return !/^[a-z][a-z0-9+.-]*:/i.test(value)
+}
+
+function isSafeHttpsUrl(value: string) {
+  try {
+    return new URL(value).protocol === 'https:'
+  } catch {
+    return false
+  }
 }
 
 type SourceDocument = {
@@ -69,7 +79,7 @@ export default function SharePage() {
   async function refreshSignedUrls(rows: SharedMaterial[]) {
     const entries = await Promise.all(rows.map(async (material): Promise<[string, string] | null> => {
       if (!material.file_url || !isStorageObjectPath(material.file_url)) return null
-      const { data, error } = await supabase.storage.from(SHARED_MATERIALS_BUCKET).createSignedUrl(material.file_url, 3600)
+      const { data, error } = await supabase.storage.from(SHARED_MATERIALS_BUCKET).createSignedUrl(material.file_url, SIGNED_LINK_SECONDS)
       if (error) {
         toast.error(`Could not create an access link for ${material.title}: ${error.message}`)
         return null
@@ -156,6 +166,10 @@ export default function SharePage() {
       toast.error('Choose either a file from your device or an existing file URL, not both.')
       return
     }
+    if (!selectedMaterialFile && fileUrl.trim() && !isSafeHttpsUrl(fileUrl.trim())) {
+      toast.error('Existing file links must be full https:// URLs.')
+      return
+    }
 
     let uploadedPath: string | null = null
     try {
@@ -186,7 +200,7 @@ export default function SharePage() {
       setSelectedMaterialFile(null)
       setMaterialFileInputVersion((version) => version + 1)
       if (uploadedPath) await refreshSignedUrls([sharedMaterial])
-      toast.success('Material shared with students')
+      toast.success('Material shared. Only signed-in students can open it, through a short-lived private link.')
     } catch (error) {
       if (uploadedPath) {
         const { error: cleanupError } = await supabase.storage.from(SHARED_MATERIALS_BUCKET).remove([uploadedPath])
@@ -251,7 +265,7 @@ export default function SharePage() {
                 aria-label="Source document title"
               />
             </div>
-            <Button type="button" onClick={handleDocumentUpload} disabled={uploadingDocument || !selectedFile} className="gap-2">
+            <Button type="button" data-testid="upload-source-button" onClick={handleDocumentUpload} disabled={uploadingDocument || !selectedFile} className="gap-2">
               {uploadingDocument ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               {uploadingDocument ? 'Extracting and indexing…' : 'Upload to source library'}
             </Button>
@@ -309,17 +323,17 @@ export default function SharePage() {
                     onChange={(event) => setSelectedMaterialFile(event.target.files?.[0] ?? null)}
                     aria-label="Select a file to share with students"
                   />
-                  <p className="text-xs text-muted-foreground">Private Supabase storage · maximum 25 MB. Choose this or paste an existing link below.</p>
+                  <p className="text-xs text-muted-foreground">Private storage · maximum 25 MB · opened only through short-lived signed links. Choose this or paste an existing https:// link below.</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="fileUrl">Or use an existing file URL</Label>
-                  <Input id="fileUrl" value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} placeholder="https://..." />
+                  <Input id="fileUrl" data-testid="material-url-input" type="url" value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} placeholder="https://..." />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="fileType">File Type</Label>
                   <Input id="fileType" value={fileType} onChange={(e) => setFileType(e.target.value)} placeholder="pdf, docx, pptx..." />
                 </div>
-                <Button type="submit" className="w-full gap-2"><Upload className="h-4 w-4" /> Share Material</Button>
+                <Button type="submit" data-testid="share-material-button" className="w-full gap-2"><Upload className="h-4 w-4" /> Share Material</Button>
               </form>
             </CardContent>
           </Card>
@@ -346,7 +360,7 @@ export default function SharePage() {
                         {m.subject && <p className="text-sm text-muted-foreground">{m.subject}</p>}
                         {m.description && <p className="mt-1 text-sm text-muted-foreground">{m.description}</p>}
                         {m.file_url && (
-                          signedMaterialUrls[m.id] || !isStorageObjectPath(m.file_url) ? (
+                          signedMaterialUrls[m.id] || isSafeHttpsUrl(m.file_url) ? (
                             <a href={signedMaterialUrls[m.id] ?? m.file_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-sm text-primary hover:underline">
                               Open file
                             </a>

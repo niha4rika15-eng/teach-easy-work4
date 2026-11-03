@@ -33,7 +33,45 @@ export const CORE_PROMPT_TEMPLATES: PromptTemplate[] = [
 
 const CORE_TYPES = new Set(CORE_PROMPT_TEMPLATES.map((template) => template.template_type))
 
-export function withCorePromptTemplates(templates: PromptTemplate[]): PromptTemplate[] {
-  const additional = templates.filter((template) => !CORE_TYPES.has(template.template_type))
+function parseVariables(value: unknown): string[] {
+  let raw = value
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw) } catch { return [] }
+  }
+  return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : []
+}
+
+// Drops malformed database rows so a bad seed can never break the template UI.
+function normalizeTemplate(row: unknown): PromptTemplate | null {
+  if (typeof row !== 'object' || row === null) return null
+  const record = row as Record<string, unknown>
+  if (typeof record.id !== 'string' || typeof record.name !== 'string' || typeof record.template_type !== 'string' || typeof record.system_prompt !== 'string') return null
+  return {
+    id: record.id,
+    name: record.name,
+    template_type: record.template_type,
+    system_prompt: record.system_prompt,
+    variables: parseVariables(record.variables),
+    created_by: typeof record.created_by === 'string' ? record.created_by : undefined,
+    created_at: typeof record.created_at === 'string' ? record.created_at : undefined,
+  }
+}
+
+export function withCorePromptTemplates(templates: unknown[] | null | undefined): PromptTemplate[] {
+  const additional = (Array.isArray(templates) ? templates : [])
+    .map(normalizeTemplate)
+    .filter((template): template is PromptTemplate => template !== null && !CORE_TYPES.has(template.template_type))
   return [...CORE_PROMPT_TEMPLATES, ...additional].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// Always resolves: falls back to the built-in templates when the table is empty, missing, or offline.
+export async function loadPromptTemplates(
+  fetchRows: () => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>,
+): Promise<{ templates: PromptTemplate[]; warning: string | null }> {
+  try {
+    const { data, error } = await fetchRows()
+    return { templates: withCorePromptTemplates(data), warning: error ? error.message : null }
+  } catch (error) {
+    return { templates: withCorePromptTemplates([]), warning: error instanceof Error ? error.message : 'Saved templates are unavailable.' }
+  }
 }

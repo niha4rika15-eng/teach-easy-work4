@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase/client';
 import { UsageLog, Generation, TEMPLATE_TYPE_LABELS } from '@/lib/types';
 import { BarChart3, TrendingUp, Activity, Star } from 'lucide-react';
+import { averageScore, formatEvidenceRisk, formatNepScore, formatQualityScore, NOT_EVALUATED, toScore } from '@/lib/scores';
 
 const PAGE_SIZE = 20;
 
@@ -21,7 +22,7 @@ export default function MetricsPage() {
   const [generationsPage, setGenerationsPage] = useState(1);
   const [avgNep, setAvgNep] = useState<number | null>(null);
   const [returningUsers, setReturningUsers] = useState<number | null>(null);
-  const [avgQuality, setAvgQuality] = useState(0);
+  const [avgQuality, setAvgQuality] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -40,10 +41,7 @@ export default function MetricsPage() {
       setTotalLogs(logsCountResult.count ?? 0);
       setTotalGenerations(generationsCountResult.count ?? 0);
 
-      const nepScores = generationMetrics.filter((generation) => generation.nep_confidence != null);
-      setAvgNep(nepScores.length
-        ? nepScores.reduce((sum, generation) => sum + (generation.nep_confidence ?? 0), 0) / nepScores.length
-        : null);
+      setAvgNep(averageScore(generationMetrics.map((generation) => generation.nep_confidence)));
 
       const userEventCounts: Record<string, number> = logUsers.reduce((acc: Record<string, number>, log) => {
         if (!log.user_id) return acc;
@@ -54,12 +52,7 @@ export default function MetricsPage() {
       const returningUsers = Object.values(userEventCounts).filter((count) => count > 1).length;
       const distinctUsers = Object.keys(userEventCounts).length;
       setReturningUsers(distinctUsers ? (returningUsers / distinctUsers) * 100 : null);
-      const ratedGenerations = generationMetrics.filter((generation) => generation.quality_rating != null);
-      setAvgQuality(
-        ratedGenerations.length > 0
-          ? ratedGenerations.reduce((sum, generation) => sum + (generation.quality_rating ?? 0), 0) / ratedGenerations.length
-          : 0
-      );
+      setAvgQuality(averageScore(generationMetrics.map((generation) => generation.quality_rating)));
     })();
   }, []);
 
@@ -95,8 +88,8 @@ export default function MetricsPage() {
               <Star className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{avgNep == null ? '—' : `${avgNep.toFixed(1)}%`}</div>
-              <p className="text-xs text-muted-foreground">AI rubric estimate, not certification</p>
+              <div className="text-2xl font-bold">{avgNep == null ? NOT_EVALUATED : formatNepScore(avgNep, 1)}</div>
+              <p className="text-xs text-muted-foreground">Model-estimated (0–100), not an official certification</p>
             </CardContent>
           </Card>
           <Card className="border-accent/20">
@@ -111,11 +104,12 @@ export default function MetricsPage() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Avg Quality Rating</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Avg Quality Estimate</CardTitle>
               <Star className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{avgQuality.toFixed(1)}/10</div>
+              <div className="text-2xl font-bold">{avgQuality == null ? NOT_EVALUATED : formatQualityScore(avgQuality, 1)}</div>
+              <p className="text-xs text-muted-foreground">Model-estimated (0–10)</p>
             </CardContent>
           </Card>
           <Card>
@@ -131,7 +125,7 @@ export default function MetricsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" /> All Generations</CardTitle>
-            <CardDescription>Every content generation with verification scores</CardDescription>
+            <CardDescription>Every content generation with model-estimated rubric scores (not certifications or fact-checks)</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="mb-3 text-sm text-muted-foreground">
@@ -144,9 +138,9 @@ export default function MetricsPage() {
                 <TableRow>
                   <TableHead>Type</TableHead>
                   <TableHead>Language</TableHead>
-                  <TableHead>NEP Alignment Est.</TableHead>
-                  <TableHead>Evidence Risk Est.</TableHead>
-                  <TableHead>Quality</TableHead>
+                  <TableHead>NEP Alignment Est. (0–100)</TableHead>
+                  <TableHead>Evidence Risk Est. (0–100)</TableHead>
+                  <TableHead>Quality Est. (0–10)</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Date</TableHead>
                 </TableRow>
@@ -157,14 +151,14 @@ export default function MetricsPage() {
                     <TableCell className="font-medium">{TEMPLATE_TYPE_LABELS[g.template_type] ?? g.template_type}</TableCell>
                     <TableCell>{g.target_language}</TableCell>
                     <TableCell>
-                      {g.nep_confidence != null ? (
-                        <span className={g.nep_confidence >= 70 ? 'text-accent font-medium' : 'text-destructive'}>
-                          {g.nep_confidence.toFixed(1)}%
+                      {toScore(g.nep_confidence) != null ? (
+                        <span className={(toScore(g.nep_confidence) ?? 0) >= 70 ? 'text-accent font-medium' : 'text-destructive'}>
+                          {formatNepScore(g.nep_confidence, 1)}
                         </span>
-                      ) : '—'}
+                      ) : NOT_EVALUATED}
                     </TableCell>
-                    <TableCell>{g.hallucination_index != null ? `${Math.round(g.hallucination_index * 100)}%` : '—'}</TableCell>
-                    <TableCell>{g.quality_rating != null ? `${g.quality_rating.toFixed(1)}/10` : '—'}</TableCell>
+                    <TableCell>{formatEvidenceRisk(g.hallucination_index)}</TableCell>
+                    <TableCell>{formatQualityScore(g.quality_rating, 1)}</TableCell>
                     <TableCell><Badge variant={g.status === 'completed' ? 'default' : 'secondary'}>{g.status}</Badge></TableCell>
                     <TableCell>{new Date(g.created_at).toLocaleDateString()}</TableCell>
                   </TableRow>

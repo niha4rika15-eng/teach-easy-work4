@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createDocx, createPdf } from './lib/exporters'
-import { extractDocumentText } from './lib/document-extraction'
+import { createDocx, createPdf } from '../lib/exporters'
+import { extractDocumentText } from '../lib/document-extraction'
 
 test('extracts UTF-8 text documents', async () => {
   const text = await extractDocumentText('notes.txt', Buffer.from('Physics notes: ऊर्जा'))

@@ -1,28 +1,40 @@
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
+import { jsonError, requireProfessorOrAdmin } from '@/lib/api-auth'
+import { parseQuizJson, quizSchema } from '@/lib/quiz'
 
-const questionSchema = z.object({
-  question: z.string().trim().min(1).max(1000),
-  options: z.array(z.string().trim().min(1).max(500)).min(2).max(8),
-  correctAnswer: z.string().trim().min(1).max(500),
-  points: z.number().int().min(1).max(100).default(1),
-})
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 const publishSchema = z.object({
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().max(2000).default(''),
   generation_id: z.string().uuid().optional(),
-  questions: z.array(questionSchema).min(1).max(50).optional(),
+  questions: quizSchema.shape.questions.optional(),
 })
 
-function getGoogleFormUrl(payload: unknown, keys: string[]) {
-  if (typeof payload !== 'object' || payload === null) return null
+const NOT_CONFIGURED = 'Google Forms publishing is not configured. Set GOOGLE_APPS_SCRIPT_URL to your deployed Apps Script web app URL (https://script.google.com/macros/s/.../exec).'
+
+function getAppsScriptUrl(): URL | null {
+  const value = process.env.GOOGLE_APPS_SCRIPT_URL?.trim()
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && url.hostname === 'script.google.com' ? url : null
+  } catch {
+    return null
+  }
+}
+
+function findGoogleFormUrl(payload: Record<string, unknown>, keys: string[], kind: 'student' | 'editor') {
   for (const key of keys) {
-    const value = (payload as Record<string, unknown>)[key]
+    const value = payload[key]
     if (typeof value !== 'string') continue
     try {
       const url = new URL(value)
-      if (url.protocol === 'https:' && ['docs.google.com', 'forms.gle'].includes(url.hostname)) {
+      if (url.protocol !== 'https:') continue
+      if (kind === 'student' && url.hostname === 'forms.gle') return url.toString()
+      if (url.hostname === 'docs.google.com' && url.pathname.startsWith('/forms/')) {
+        if (kind === 'editor' && !/\/edit/.test(url.pathname)) continue
         return url.toString()
       }
     } catch {
@@ -33,117 +45,82 @@ function getGoogleFormUrl(payload: unknown, keys: string[]) {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireProfessorOrAdmin('publish Google Forms')
+  if ('response' in auth) return auth.response
+
+  const endpointUrl = getAppsScriptUrl()
+  if (!endpointUrl) return jsonError(NOT_CONFIGURED, 503, { code: 'apps_script_not_configured' })
+
   try {
-    const supabase = await createClient()
-    const { data: authData, error: authError } = await supabase.auth.getUser()
-    if (authError || !authData.user) {
-      return Response.json({ error: 'Authentication is required to publish a form.' }, { status: 401 })
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', authData.user.id)
-      .maybeSingle()
-    if (profileError) throw new Error(`Could not verify the current user role: ${profileError.message}`)
-    if (profile?.role !== 'professor' && profile?.role !== 'admin') {
-      return Response.json({ error: 'Only professors and administrators can publish Google Forms.' }, { status: 403 })
-    }
-
     let rawInput: unknown
     try {
       rawInput = await request.json()
     } catch {
-      return Response.json({ error: 'Request body must be valid JSON.' }, { status: 400 })
+      return jsonError('Request body must be valid JSON.', 400)
     }
     const parsedInput = publishSchema.safeParse(rawInput)
-    if (!parsedInput.success) {
-      return Response.json({ error: parsedInput.error.issues[0]?.message ?? 'Invalid form payload.' }, { status: 400 })
-    }
+    if (!parsedInput.success) return jsonError(parsedInput.error.issues[0]?.message ?? 'Invalid form payload.', 400)
+
     const { generation_id: generationId, questions: providedQuestions, ...form } = parsedInput.data
     let questions = providedQuestions
     if (!questions && generationId) {
-      const { data: generation, error: generationError } = await supabase
+      const { data: generation, error: generationError } = await auth.supabase
         .from('generations')
-        .select('generated_text')
+        .select('generated_text, template_type')
         .eq('id', generationId)
-        .eq('user_id', authData.user.id)
+        .eq('user_id', auth.user.id)
         .maybeSingle()
-      if (generationError) throw new Error(`Could not load generated quiz: ${generationError.message}`)
-      if (!generation?.generated_text) {
-        return Response.json({ error: 'The generated quiz could not be found.' }, { status: 404 })
+      if (generationError) {
+        console.error('Quiz lookup failed:', generationError.message)
+        return jsonError('Could not load the generated quiz. Please try again.', 503)
       }
+      if (!generation?.generated_text) return jsonError('The generated quiz could not be found.', 404)
+      if (generation.template_type !== 'quiz') return jsonError('Only quiz generations can be published as Google Forms.', 400)
 
-      let generatedPayload: unknown
-      try {
-        generatedPayload = JSON.parse(generation.generated_text)
-      } catch {
-        return Response.json({ error: 'Generated quiz must be structured JSON to publish as a Google Form.' }, { status: 400 })
-      }
+      const parsedQuiz = parseQuizJson(generation.generated_text)
+      if ('error' in parsedQuiz) return jsonError(`Generated quiz cannot be published: ${parsedQuiz.error}`, 400)
+      questions = parsedQuiz.quiz.questions
+    }
+    if (!questions) return jsonError('Provide quiz questions or a generated quiz ID.', 400)
 
-      const parsedQuiz = z.object({ questions: z.array(questionSchema).min(1).max(50) }).safeParse(generatedPayload)
-      if (!parsedQuiz.success) {
-        return Response.json({ error: 'Generated quiz JSON does not contain valid questions and answers.' }, { status: 400 })
-      }
-      questions = parsedQuiz.data.questions
-    }
-
-    if (!questions) {
-      return Response.json({ error: 'Provide quiz questions or a generated quiz ID.' }, { status: 400 })
-    }
-    for (const question of questions) {
-      if (!question.options.includes(question.correctAnswer)) {
-        return Response.json({ error: 'Each correctAnswer must match one of its question options.' }, { status: 400 })
-      }
-    }
-
-    const endpoint = process.env.GOOGLE_APPS_SCRIPT_URL
-    if (!endpoint) {
-      return Response.json({ error: 'Google Forms publishing is not configured. Set GOOGLE_APPS_SCRIPT_URL to your Apps Script web app URL.' }, { status: 503 })
-    }
-    const endpointUrl = new URL(endpoint)
-    if (endpointUrl.protocol !== 'https:' || endpointUrl.hostname !== 'script.google.com') {
-      throw new Error('GOOGLE_APPS_SCRIPT_URL must be an HTTPS Google Apps Script URL.')
-    }
-
-    const webhookResponse = await fetch(endpointUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, questions }),
-      cache: 'no-store',
-      redirect: 'follow',
-      signal: AbortSignal.timeout(30_000),
-    })
-    const responseText = await webhookResponse.text()
-    if (!webhookResponse.ok) {
-      return Response.json(
-        { error: `Google Forms publishing failed with status ${webhookResponse.status}.` },
-        { status: 502 },
-      )
-    }
-
-    let webhookPayload: unknown
+    let webhookResponse: Response
     try {
-      webhookPayload = JSON.parse(responseText)
-    } catch {
-      return Response.json({ error: 'The Apps Script response was not valid JSON.' }, { status: 502 })
+      webhookResponse = await fetch(endpointUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, questions }),
+        cache: 'no-store',
+        redirect: 'follow',
+        signal: AbortSignal.timeout(30_000),
+      })
+    } catch (error) {
+      console.error('Apps Script request failed:', error)
+      return jsonError('Could not reach the Google Apps Script publishing service.', 502)
     }
-    if (
-      typeof webhookPayload === 'object' &&
-      webhookPayload !== null &&
-      'success' in webhookPayload &&
-      (webhookPayload as { success?: unknown }).success === false
-    ) {
-      return Response.json({ error: 'The Apps Script did not create the Google Form.' }, { status: 502 })
+    const responseText = await webhookResponse.text()
+    if (!webhookResponse.ok) return jsonError(`Google Forms publishing failed with status ${webhookResponse.status}.`, 502)
+
+    let payload: unknown
+    try {
+      payload = JSON.parse(responseText)
+    } catch {
+      return jsonError('The Apps Script response was not valid JSON. Check that the web app is deployed with access for "Anyone".', 502)
+    }
+    if (typeof payload !== 'object' || payload === null) return jsonError('The Apps Script returned an unexpected response.', 502)
+    const result = payload as Record<string, unknown>
+    if (result.success === false) {
+      const detail = typeof result.error === 'string' ? `: ${result.error.slice(0, 300)}` : ''
+      return jsonError(`The Apps Script did not create the Google Form${detail}`, 502)
     }
 
-    const formUrl = getGoogleFormUrl(webhookPayload, ['formUrl', 'studentQuizLink', 'studentUrl', 'publishedUrl', 'url'])
-    const editUrl = getGoogleFormUrl(webhookPayload, ['editUrl', 'professorResultsLink', 'editorUrl'])
-    if (!formUrl) {
-      return Response.json({ error: 'The Apps Script response did not contain a valid Google Form URL.' }, { status: 502 })
+    const formUrl = findGoogleFormUrl(result, ['formUrl', 'studentQuizLink', 'studentUrl', 'publishedUrl', 'url'], 'student')
+    const editUrl = findGoogleFormUrl(result, ['editUrl', 'professorResultsLink', 'editorUrl'], 'editor')
+    if (!formUrl || !editUrl) {
+      return jsonError('The Apps Script response did not include both a valid student link and editor link for the Google Form.', 502)
     }
-    const { error: saveError } = await supabase.from('quiz_forms').insert({
-      user_id: authData.user.id,
+
+    const { error: saveError } = await auth.supabase.from('quiz_forms').insert({
+      user_id: auth.user.id,
       generation_id: generationId ?? null,
       title: form.title,
       student_quiz_link: formUrl,
@@ -155,10 +132,10 @@ export async function POST(request: Request) {
       editUrl,
       student_quiz_link: formUrl,
       professor_results_link: editUrl,
-      warning: saveError ? `The form was created, but its links could not be saved to the quiz list: ${saveError.message}` : null,
+      warning: saveError ? 'The form was created, but its links could not be saved to your quiz list.' : null,
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unexpected Google Forms publishing error.'
-    return Response.json({ error: message }, { status: 500 })
+    console.error('Google Forms publishing failed:', error)
+    return jsonError('Unexpected Google Forms publishing error. Please try again.', 500)
   }
 }
