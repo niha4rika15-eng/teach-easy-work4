@@ -86,8 +86,13 @@ create policy "delete_templates" on public.prompt_templates
   using (created_by = auth.uid() or public.is_admin());
 
 -- Private bucket storage policies. No UPDATE policy exists, so stored objects cannot be overwritten.
-revoke update on storage.objects from anon;
-grant select, insert, delete on storage.objects to authenticated;
+-- Hosted Supabase already grants these; ignore the error where storage.objects is not owned by this role.
+do $$
+begin
+  grant select, insert, delete on storage.objects to authenticated;
+exception when insufficient_privilege then
+  null;
+end $$;
 
 drop policy if exists shared_material_upload_owner on storage.objects;
 create policy shared_material_upload_owner on storage.objects

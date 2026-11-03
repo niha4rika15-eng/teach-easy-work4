@@ -33,10 +33,10 @@ function findGoogleFormUrl(payload: Record<string, unknown>, keys: string[], kin
       const url = new URL(value)
       if (url.protocol !== 'https:') continue
       if (kind === 'student' && url.hostname === 'forms.gle') return url.toString()
-      if (url.hostname === 'docs.google.com' && url.pathname.startsWith('/forms/')) {
-        if (kind === 'editor' && !/\/edit/.test(url.pathname)) continue
-        return url.toString()
-      }
+      if (url.hostname !== 'docs.google.com' || !url.pathname.startsWith('/forms/')) continue
+      // Students must never receive the editor link; the editor link must be an /edit URL.
+      if (kind === 'student' && /\/viewform$/.test(url.pathname)) return url.toString()
+      if (kind === 'editor' && /\/edit$/.test(url.pathname)) return url.toString()
     } catch {
       continue
     }

@@ -83,17 +83,17 @@ export default function LoginPage() {
                 <Label htmlFor="email">Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-                  <Input id="email" type="email" placeholder="you@example.com" className="pl-10" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                  <Input id="email" data-testid="login-email-input" type="email" placeholder="you@example.com" className="pl-10" value={email} onChange={(e) => setEmail(e.target.value)} required />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-                  <Input id="password" type="password" placeholder="••••••••" className="pl-10" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                  <Input id="password" data-testid="login-password-input" type="password" placeholder="••••••••" className="pl-10" value={password} onChange={(e) => setPassword(e.target.value)} required />
                 </div>
               </div>
-              <Button type="submit" className="w-full gap-2" disabled={loading}>
+              <Button type="submit" data-testid="login-submit-button" className="w-full gap-2" disabled={loading}>
                 {loading ? 'Signing in...' : <>Sign In <ArrowRight className="h-4 w-4" /></>}
               </Button>
             </form>

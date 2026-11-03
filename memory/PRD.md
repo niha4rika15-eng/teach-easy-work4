@@ -14,3 +14,11 @@ User choices: test against real Supabase (keys pending), move loose root files i
 
 ## Backlog
 - Live Supabase verification (needs URL/anon key + apply migrations), per-student sharing picker UI, OCR for scanned PDFs.
+
+## Session 2 (2026-11-03)
+- Live Supabase probed (read-only): schema differs from repo (no prompt_templates/shared_materials/generations/document_chunks; legacy professor_documents/usage_logs; anon can read profiles).
+- Migrations made safe for that project: legacy tables renamed *_legacy, profiles columns/roles normalized, all old profile policies dropped, storage grant wrapped.
+- AI provider switched to Gemini (gemini-3.8-flash with fallbacks; gemini-embedding-001 @1536, normalized); OpenAI fallback. Provider-specific relevance cutoff (Gemini 0.6).
+- Forms: student link must be /viewform or forms.gle; editor must be /edit.
+- Testing agent iteration_1: 17/17 HTTP, 27/27 unit, tsc + lint clean.
+- Pending (user): run 4 migrations in Supabase SQL editor; set GEMINI_API_KEY in Vercel; rotate Gemini key pasted in chat; then test signed-in flows.

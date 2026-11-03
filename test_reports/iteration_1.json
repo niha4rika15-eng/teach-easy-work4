@@ -1,0 +1,38 @@
+{
+  "summary": "Tested the Teach Easy Next.js 16 production build at http://localhost:3005 without logging in, and reviewed the code and SQL. 17 of 17 HTTP pytest checks passed. GET/POST/DELETE /api/professor/documents (including a multipart upload), POST /api/google/forms-create, POST /api/generate-and-verify and GET /api/export all return HTTP 401 with JSON {error} and content-type application/json. This holds with no cookie, with the bogus sb-pctk-auth-token cookie, with chunked/garbage sb-*-auth-token cookies (curl), and export with invalid params returns 400 JSON. /, /login and /signup render with 0 page errors. npm test passed 27/27, npx tsc --noEmit exited 0, npm run lint reported 0 errors and 4 warnings. Score formatting uses /100 and /10 units and shows 'Not evaluated' on the professor, admin, metrics and generate pages; no '%' or 0 defaults are applied to scores. The built-in template fallback, quiz schema, upload signature check, 1536-dim vectors and the retrieval ownership filter look correct. Signed-in professor, student and admin flows were not tested because the live Supabase schema does not match the migrations.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/google/forms-create", "issue": "findGoogleFormUrl(kind='student') accepts any docs.google.com/forms/* URL, including an /edit URL. If the Apps Script returns the editor URL in formUrl/url, students would receive the editor link. The student link should require forms.gle or a /viewform path and reject /edit."},
+      {"endpoint": "/api/google/forms-create", "issue": "The Apps Script URL is only checked for hostname script.google.com. The path is not checked against /macros/s/.../exec (acceptable, but the NOT_CONFIGURED message implies a stricter check)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/login", "issues": ["The page has no data-testid attributes (email, password and sign-in button are missing them)", "The background gradient stops at about 760px at 1920x1080, leaving a visible white band at the bottom (the wrapper probably lacks min-h-screen)"]}
+    ]
+  },
+  "critical_code_review_comments": [
+    "SQL 20261103030000: no syntax errors found. The bucket is private with a 26214400 (25MB) limit. can_read_shared_material allows the owner, an admin, or a student when student_ids is empty or contains auth.uid(). Storage read requires a shared_materials row whose file_url = object name and whose first path segment = m.professor_id. Insert/delete are limited to the owner's single-level folder.",
+    "SQL risk: 'revoke update on storage.objects from anon; grant select, insert, delete on storage.objects to authenticated;' may fail on hosted Supabase with 'must be owner of table objects', because storage.objects is owned by supabase_storage_admin. These grants already exist by default, so consider removing the statements or wrapping them in a DO block with exception handling.",
+    "SQL: storage policies do not restrict the object name to the shared-materials prefix when matching a shared_materials row, so another bucket's object with the same name could match. Mitigated by the bucket_id check in the outer AND, so this is OK.",
+    "Deleting a shared_materials row does not remove the storage object, so orphaned files remain in storage. Consider cleaning up on delete.",
+    "api-auth.ts never throws; it returns 401 when there is no sb-*-auth-token cookie or no user, 403 for a non-staff role, and 503 for a profile lookup error. Good.",
+    "The export route validates query params before auth, so unauthenticated users can tell valid from invalid params (400 vs 401). This is harmless."
+  ],
+  "test_report_links": ["/app/tests/http/test_unauth_api.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Tighten the forms-create student-link validation to reject /edit URLs (require /viewform or forms.gle)",
+    "Review or remove the GRANT/REVOKE on storage.objects in migration 20261103030000 so it does not fail on hosted Supabase",
+    "Optional: add data-testid attributes to the login and signup forms, and fix the login background height"
+  ],
+  "updated_files": ["/app/tests/http/test_unauth_api.py"],
+  "success_rate": {"backend": "100% (17/17 HTTP checks, 27/27 unit tests)", "frontend": "100% for public pages"},
+  "test_credentials": "/app/memory/test_credentials.md has no accounts (live Supabase not migrated); signed-in flows not testable",
+  "seed_data_creation": "None. No writes to Supabase.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The app is a standalone Next.js app on port 3005 (not supervisor). Run: cd /app/tests/http && python -m pytest test_unauth_api.py -p no:cacheprovider. Once the migrations are applied in Supabase, test the signed-in professor flows: document upload, generation with RAG citations, quiz publish, shared-material storage RLS for students."
+}
