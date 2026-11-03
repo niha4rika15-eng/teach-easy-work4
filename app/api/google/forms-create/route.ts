@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { jsonError, requireProfessorOrAdmin } from '@/lib/api-auth'
 import { parseQuizJson, quizSchema } from '@/lib/quiz'
+import { getGoogleAppsScriptUrl } from '@/lib/env'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -12,10 +13,10 @@ const publishSchema = z.object({
   questions: quizSchema.shape.questions.optional(),
 })
 
-const NOT_CONFIGURED = 'Google Forms publishing is not configured. Set GOOGLE_APPS_SCRIPT_URL to your deployed Apps Script web app URL (https://script.google.com/macros/s/.../exec).'
+const NOT_CONFIGURED = 'Google Forms publishing is not configured. Set google_gorm_api to your deployed Apps Script web app URL (https://script.google.com/macros/s/.../exec).'
 
 function getAppsScriptUrl(): URL | null {
-  const value = process.env.GOOGLE_APPS_SCRIPT_URL?.trim()
+  const value = getGoogleAppsScriptUrl()
   if (!value) return null
   try {
     const url = new URL(value)

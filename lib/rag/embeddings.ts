@@ -1,4 +1,5 @@
 import { getAiProvider } from '@/lib/ai'
+import { getGeminiApiKey, getOpenAiApiKey } from '@/lib/env'
 
 export const EMBEDDING_DIMENSIONS = 1536
 const OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small'
@@ -37,7 +38,7 @@ async function callProvider(inputs: string[], options: EmbeddingOptions): Promis
   if (getAiProvider() === 'gemini') {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_EMBEDDING_MODEL}:batchEmbedContents`, {
       method: 'POST',
-      headers: { 'x-goog-api-key': process.env.GEMINI_API_KEY as string, 'Content-Type': 'application/json' },
+      headers: { 'x-goog-api-key': getGeminiApiKey() as string, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         requests: inputs.map((text) => ({
           model: `models/${GEMINI_EMBEDDING_MODEL}`,
@@ -57,7 +58,7 @@ async function callProvider(inputs: string[], options: EmbeddingOptions): Promis
 
   const response = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY ?? process.env.openai_apikey}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${getOpenAiApiKey()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: OPENAI_EMBEDDING_MODEL, input: inputs, dimensions: EMBEDDING_DIMENSIONS }),
     cache: 'no-store',
     signal: AbortSignal.timeout(options.timeoutMs ?? 45_000),

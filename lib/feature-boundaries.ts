@@ -14,7 +14,7 @@ export const FEATURE_BOUNDARIES: readonly FeatureBoundary[] = [
     label: 'Research-grounded generation',
     status: 'requires-configuration',
     description: 'Semantic retrieval, upload, ingestion, and citation display are implemented. Runtime use requires the RAG migrations, professor permissions, and server-side Gemini (or OpenAI) credentials.',
-    nextStep: 'Apply the reviewed Supabase migrations, configure GEMINI_API_KEY in Vercel, then upload and test a source document.',
+    nextStep: 'Apply the reviewed Supabase migrations, configure geminiapi_script in Vercel, then upload and test a source document.',
   },
   {
     key: 'embeddings',
@@ -56,7 +56,7 @@ export const FEATURE_BOUNDARIES: readonly FeatureBoundary[] = [
     label: 'Google Forms publishing',
     status: 'requires-configuration',
     description: 'Professors can publish quizzes through a configured Apps Script web app and receive student/editor links. A Google API key alone does not provide the OAuth permissions required to create forms.',
-    nextStep: 'Set GOOGLE_APPS_SCRIPT_URL in Vercel and verify the script returns Google Forms URLs.',
+    nextStep: 'Set google_gorm_api in Vercel and verify the script returns Google Forms URLs.',
   },
 ] as const
 

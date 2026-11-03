@@ -12,7 +12,7 @@ The profile trigger assigns new accounts the `student` role because client-suppl
 
 ## Source library and retrieval-augmented generation
 
-Configure `GEMINI_API_KEY` as a server-only Vercel environment variable (`GEMINI_MODEL` optional, default `gemini-3.8-flash`). Embeddings use `gemini-embedding-001` truncated to 1,536 dimensions and re-normalized, matching the SQL vector column. If `GEMINI_API_KEY` is absent, `OPENAI_API_KEY` is used instead (`gpt-4o-mini` + `text-embedding-3-small`, also 1,536 dimensions). Vectors from different providers are not comparable: re-upload source documents after switching providers. Never prefix these provider secrets with `NEXT_PUBLIC_`.
+Configure `geminiapi_script` (fallback: `GEMINI_API_KEY`) as a server-only Vercel environment variable (`GEMINI_MODEL` optional, default `gemini-3.8-flash`). Embeddings use `gemini-embedding-001` truncated to 1,536 dimensions and re-normalized, matching the SQL vector column. If no Gemini key is set, `openai_api_key` (fallback: `OPENAI_API_KEY`) is used instead (`gpt-4o-mini` + `text-embedding-3-small`, also 1,536 dimensions). Vectors from different providers are not comparable: re-upload source documents after switching providers. Never prefix these provider secrets with `NEXT_PUBLIC_`.
 
 Professors can index selectable-text PDF, DOCX, TXT, and Markdown files from Professor → Share Materials. Uploads are limited to 4 MB, 200 pages per PDF, and 200,000 extracted characters. Scanned/image-only PDFs need OCR before upload. The app extracts text on the server, hashes the original file, chunks text at paragraph/sentence boundaries with overlap, creates embeddings in batches, and stores the source passages in Supabase; the original binary is not retained. Uploads, grounded generation, and citation persistence require the reviewed RAG migration to be installed.
 
@@ -32,7 +32,7 @@ Generated content can be exported as DOCX, PPTX, or PDF. PDF export currently ac
 
 ## Publishing
 
-Quizzes can be published through `POST /api/google/forms-create` using the server-side `GOOGLE_APPS_SCRIPT_URL` setting. The endpoint requires an authenticated professor/admin, accepts structured quiz content from an owned generation, and saves returned links to `quiz_forms`. A Google Forms API key alone does not grant the OAuth permissions needed to create forms; configure an Apps Script web app that has the required access, and set its URL in Vercel. Keep Apps Script credentials server-side; only the Supabase URL and publishable/anon key belong in public client configuration. Confirm the Apps Script endpoint returns valid student and editor links.
+Quizzes can be published through `POST /api/google/forms-create` using the server-side `google_gorm_api` setting (fallbacks: `GOOGLE_APPS_SCRIPT_URL`, `GOOGLE_FORM_API`). The endpoint requires an authenticated professor/admin, accepts structured quiz content from an owned generation, and saves returned links to `quiz_forms`. A Google Forms API key alone does not grant the OAuth permissions needed to create forms; configure an Apps Script web app that has the required access, and set its URL in Vercel as `google_gorm_api`. Keep Apps Script credentials server-side; only the Supabase URL and publishable/anon key belong in public client configuration. Confirm the Apps Script endpoint returns valid student and editor links.
 
 ## Project layout
 

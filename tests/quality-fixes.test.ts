@@ -80,12 +80,37 @@ test('gemini vectors are re-normalized and relevance cutoffs depend on the provi
   const { normalizeVector, getMinimumRelevantSimilarity } = await import('../lib/rag/embeddings')
   const unit = normalizeVector([3, 4])
   assert.ok(Math.abs(unit[0] - 0.6) < 1e-9 && Math.abs(unit[1] - 0.8) < 1e-9)
-  const saved = { gemini: process.env.GEMINI_API_KEY, openai: process.env.OPENAI_API_KEY }
-  process.env.GEMINI_API_KEY = 'test'
+  const names = ['geminiapi_script', 'GEMINI_API_KEY', 'openai_api_key', 'OPENAI_API_KEY', 'openai_apikey']
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]))
+  names.forEach((name) => delete process.env[name])
+  process.env.geminiapi_script = 'test'
   assert.equal(getMinimumRelevantSimilarity(), 0.6)
-  delete process.env.GEMINI_API_KEY
-  process.env.OPENAI_API_KEY = 'test'
+  delete process.env.geminiapi_script
+  process.env.openai_api_key = 'test'
   assert.equal(getMinimumRelevantSimilarity(), 0.2)
-  if (saved.gemini === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = saved.gemini
-  if (saved.openai === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = saved.openai
+  names.forEach((name) => { if (saved[name] === undefined) delete process.env[name]; else process.env[name] = saved[name] })
+})
+
+test('custom deployment env names are read first, with standard names as fallbacks', async () => {
+  const { getGeminiApiKey, getGoogleAppsScriptUrl, getOpenAiApiKey } = await import('../lib/env')
+  const names = ['geminiapi_script', 'GEMINI_API_KEY', 'openai_api_key', 'OPENAI_API_KEY', 'openai_apikey', 'google_gorm_api', 'GOOGLE_APPS_SCRIPT_URL', 'GOOGLE_FORM_API']
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]))
+  names.forEach((name) => delete process.env[name])
+  assert.equal(getGeminiApiKey(), undefined)
+  assert.equal(getOpenAiApiKey(), undefined)
+  assert.equal(getGoogleAppsScriptUrl(), undefined)
+  process.env.GEMINI_API_KEY = 'std'
+  process.env.geminiapi_script = ' custom '
+  process.env.OPENAI_API_KEY = 'std-openai'
+  process.env.GOOGLE_FORM_API = 'https://script.google.com/macros/s/legacy/exec'
+  assert.equal(getGeminiApiKey(), 'custom')
+  assert.equal(getOpenAiApiKey(), 'std-openai')
+  assert.equal(getGoogleAppsScriptUrl(), 'https://script.google.com/macros/s/legacy/exec')
+  process.env.google_gorm_api = 'https://script.google.com/macros/s/custom/exec'
+  process.env.openai_api_key = 'custom-openai'
+  process.env.geminiapi_script = '   '
+  assert.equal(getGoogleAppsScriptUrl(), 'https://script.google.com/macros/s/custom/exec')
+  assert.equal(getOpenAiApiKey(), 'custom-openai')
+  assert.equal(getGeminiApiKey(), 'std')
+  names.forEach((name) => { if (saved[name] === undefined) delete process.env[name]; else process.env[name] = saved[name] })
 })

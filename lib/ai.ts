@@ -1,3 +1,5 @@
+import { getGeminiApiKey, getOpenAiApiKey } from '@/lib/env'
+
 type ChatMessage = { role: 'system' | 'user'; content: string }
 
 type ChatOptions = {
@@ -19,16 +21,16 @@ const GEMINI_FALLBACK_MODELS = ['gemini-3.5-flash', 'gemini-3-flash-preview']
 
 // Gemini is preferred when configured; OpenAI remains supported.
 export function getAiProvider(): AiProvider {
-  if (process.env.GEMINI_API_KEY) return 'gemini'
-  if (process.env.OPENAI_API_KEY ?? process.env.openai_apikey) return 'openai'
-  throw new Error('No AI provider is configured. Set GEMINI_API_KEY (or OPENAI_API_KEY) on the server.')
+  if (getGeminiApiKey()) return 'gemini'
+  if (getOpenAiApiKey()) return 'openai'
+  throw new Error('No AI provider is configured. Set geminiapi_script (or openai_api_key) on the server.')
 }
 
 function getChatConfig() {
   if (getAiProvider() === 'gemini') {
     return {
       url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
-      apiKey: process.env.GEMINI_API_KEY as string,
+      apiKey: getGeminiApiKey() as string,
       models: [process.env.GEMINI_MODEL ?? 'gemini-3.8-flash', ...GEMINI_FALLBACK_MODELS],
       tokenField: 'max_tokens',
       extra: { reasoning_effort: 'low' },
@@ -37,7 +39,7 @@ function getChatConfig() {
   }
   return {
     url: 'https://api.openai.com/v1/chat/completions',
-    apiKey: (process.env.OPENAI_API_KEY ?? process.env.openai_apikey) as string,
+    apiKey: getOpenAiApiKey() as string,
     model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
     tokenField: 'max_completion_tokens',
     label: 'OpenAI',
