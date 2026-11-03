@@ -35,7 +35,7 @@ export function AppNav({ children }: { children: ReactNode }) {
 
   const userRole = (profile?.role || '').toLowerCase() as keyof typeof navItems;
   const items = profile ? navItems[userRole] || [] : [];
-  const roleColor = userRole === 'admin' ? 'text-destructive' : userRole === 'professor' ? 'text-primary' : 'text-accent';
+  const roleColor = userRole === 'admin' ? 'text-primary' : userRole === 'professor' ? 'text-primary' : 'text-accent';
 
   async function handleSignOut() {
     await signOut();
@@ -71,7 +71,7 @@ export function AppNav({ children }: { children: ReactNode }) {
               </div>
               <span className="text-sm font-medium">{profile?.full_name}</span>
             </div>
-            <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out">
+            <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign out" aria-label="Sign out" data-testid="nav-sign-out-button">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>

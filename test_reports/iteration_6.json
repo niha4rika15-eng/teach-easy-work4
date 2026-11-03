@@ -1,0 +1,29 @@
+{
+  "summary": "Focused re-test of the iteration 5 fixes. All 5 fixes pass. (1) Mobile overflow: rebuilt the scratch reproduction (/tmp/mm/grid2.html) with the app's production CSS and the exact classes 'grid grid-cols-1 gap-6 lg:grid-cols-2 [&>*]:min-w-0'. It has a 1872px SVG, a long LR mermaid <pre> and an unbreakable table cell. At 390px, scrollWidth is 390 (column 358px). At 1920px it shows 2 columns of 604px. The [&>*]:min-w-0 rule is in the built CSS. The class is in generate, share and student/notifications. (2) --destructive is 0 72% 45% in :root and .dark, and .dashboard-shell doesn't override it. text-destructive is rgb(197,32,32) and the success colour is rgb(31,132,78), so they are clearly different. admin/metrics shows failing NEP scores (<70) with text-destructive. (3) Favicon: /icon.svg returns 200 and <link rel=icon href=/icon.svg?...> is in the head of /, /login and /signup. (4) Nav: Button asChild(Slot)+Link, so no button is nested inside an anchor. The testids nav-link-* and nav-mobile-link-* are unique per role (all hrefs are distinct). tsc exits 0. (5) PPTX: rebuilt deck-diagrams.pptx, converted it to PDF (10 pages) and made a contact sheet. diagram1.png is 1872x226 (ratio 8.3). Slide 6 now puts the LR Calvin-cycle flowchart full width under the bullets, and it is readable. Captions are 10pt #4B5563. Public pages at desktop 1920x800 and mobile 390x844 (/, /login, /signup): no horizontal overflow (scrollWidth equals the viewport), body background rgb(245,250,247), no console errors or warnings. Protected routes /professor, /student, /admin and /professor/generate return 307 to /login?next=. Regression: npm test 38/38, tsc 0, lint 0 errors (4 warnings), pytest test_unauth_api.py 33/33.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PPTX slide 8 (Worked Example)", "issues": ["The Commons 'photosynthesis chemical equation' image is 960x720 (ratio 1.33), so it stays in the side panel. The equation in it is a thin strip with a lot of whitespace, so it looks tiny and is hard to read. The aspect-ratio rule can't catch this. Consider trimming whitespace or choosing a different image. Low priority."]},
+      {"screen": "Admin role badge and nav shield icon", "issues": ["Now that destructive is red, the admin role Badge (variant='destructive') in admin/users and the admin roleColor 'text-destructive' in app-nav are red. That looks like an error state. Consider a neutral or primary colour. Low priority."]}
+    ]
+  },
+  "test_report_links": ["/app/tests/http/test_unauth_api.py", "/app/test_reports/pytest/iteration6_unauth.xml", "/app/tests/live/out/deck-diagrams-grid.png", "/tmp/mm/grid2.html"],
+  "action_items": [
+    "(Low) Use a non-destructive colour for the admin role badge and nav shield icon.",
+    "(Low) Slide 8: the equation image is unreadable at side-panel size (content has whitespace padding).",
+    "(Low, optional) The sign-out icon button in app-nav has no data-testid.",
+    "(Blocked, user action) Migrate the Supabase schema to allow signed-in visual testing."
+  ],
+  "critical_code_review_comments": [
+    "app-nav.tsx: the asChild pattern is correct. The testid is derived from the href, so it would collide if 2 items ever share an href. That's fine today.",
+    "exporters.ts addDeckSlide: the wide layout fits the bullets into h=3.4 with fit:'shrink'. LibreOffice ignores shrink, so 6 or more long bullets could overflow into the image at y=4.75. That's fine for the current deck."
+  ],
+  "updated_files": ["/tmp/mm/grid2.html (scratch only)", "/app/tests/live/out/deck-diagrams.pptx/.pdf/-grid.png (regenerated)"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None. No writes to Supabase; Apps Script was not called.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The prod server is on :3005 and /tmp/mm is served on :8765. grid2.html links the app's built CSS chunk (/_next/static/chunks/1vpz33pesb4jq.css). The chunk hash changes when the app is rebuilt. Signed-in pages are still blocked by the unmigrated Supabase schema."
+}

@@ -82,7 +82,7 @@ export default function AdminUsersPage() {
                     <TableCell className="font-medium">{user.full_name}</TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell className="space-x-1">
-                      <Badge variant={user.role === 'admin' ? 'destructive' : 'secondary'} className="capitalize">{user.role}</Badge>
+                      <Badge variant={user.role === 'admin' ? 'default' : 'secondary'} className="capitalize">{user.role}</Badge>
                       {user.requested_role && <Badge variant="outline" className="capitalize">requested {user.requested_role}</Badge>}
                     </TableCell>
                     <TableCell>{user.institution || '—'}</TableCell>
