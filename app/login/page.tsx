@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
@@ -33,6 +33,10 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get('registered') === '1') toast.success('Account created. Confirm your email if asked, then sign in.');
+  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -111,7 +115,7 @@ function LoginForm() {
         <Label htmlFor="password">Password</Label>
         <div className="relative">
           <Lock className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-          <Input id="password" data-testid="login-password-input" type="password" placeholder="••••••••" className="pl-10" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <Input id="password" data-testid="login-password-input" type="password" placeholder="Enter your password" className="pl-10" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </div>
       </div>
       <Button type="submit" data-testid="login-submit-button" className="w-full gap-2" disabled={loading}>

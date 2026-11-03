@@ -1,0 +1,56 @@
+{
+  "summary": "Iteration 4 tested the dashboard bypass fix, the role selector on login and signup (now with Admin), the admin_set_role SQL, Unicode PDF export, real Wikimedia images and diagram PNGs in the exports, plus regression checks. Everything I tested passed. npm test 37/37 pass, tsc has 0 errors, lint has 0 errors (4 warnings), and the HTTP suite passes 33/33 after I updated it. Signed-in flows are BLOCKED, not failed: the live DB is not migrated and the admin password is rejected. I did not retry it and wrote nothing to Supabase.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/export", "issue": "The schema allows up to 30 diagrams of up to 3MB each, but Vercel functions reject request bodies over about 4.5MB. A deck with several large 2x-scale PNGs will get a 413 from the platform before the route runs. Suggest checking the total payload size on the client, or lowering the scale or using JPEG for big diagrams."},
+      {"endpoint": "GET /api/images/search", "issue": "Only professors and admins can call this. If GeneratedContent is shown to students (shared materials), the [IMAGE] hooks will always fall back to placeholders. Confirm this is intended."},
+      {"endpoint": "admin_set_role (SQL)", "issue": "When target_user does not exist, the function silently does nothing (UPDATE matches 0 rows). Suggest raising an error when no row is found so the UI does not show a false success toast."},
+      {"endpoint": "migration profiles_role_check", "issue": "If legacy rows have roles outside admin/professor/student after lower() (e.g. 'teacher'), adding the constraint will fail and abort the migration. Consider mapping those values first."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PDF export (Unicode)", "issues": ["Glyphs are shaped correctly, with no tofu boxes: Hindi conjuncts (प्र, क्लो, र्थ, द्रा), Bengali and Telugu all render. However, Devanagari runs sit slightly higher than Latin runs on the same line (e.g. 'क्लोरोफिल (Chlorophyll)' and 'Concept | अर्थ'). There is a baseline/ascent mismatch between fonts in createPdf run layout."]},
+      {"screen": "Login/Signup", "issues": ["The password placeholder '••••••••' looks like a pre-filled value. Minor.", "The /login?registered=1 redirect after signup shows no confirmation message on the login page. Minor."]}
+    ]
+  },
+  "verified": [
+    "Home page / shows only the Sign In and Get Started buttons (nav-sign-in-button, nav-get-started-button). No 'Dashboard' text anywhere, desktop and mobile.",
+    "The proxy returns 307 to /login?next=<path> for /admin, /admin/users, /professor, /professor/generate, /student and /student/* without a cookie, and also with a bogus sb-*-auth-token cookie. /login, /signup and / return 200.",
+    "Opening /admin/users in the browser lands on /login?next=%2Fadmin%2Fusers with no auto-redirect.",
+    "The login role radios work: student is checked by default; clicking Admin sets aria-checked=true only on Admin. Bad credentials show the toast 'Invalid login credentials' and keep the user on /login.",
+    "Code review of the role-mismatch check: signOut runs and the toast reads 'This account does not have X access'. safeNextPath only accepts a same-origin /<role> prefix.",
+    "Signup has 3 role cards; aria-pressed toggles correctly. auth-context sends only requested_role. Nothing in app, lib or the proxy reads user_metadata or app_metadata for authorization. api-auth reads profiles.role.",
+    "SQL review found no privilege escalation. The trigger always sets role='student' and requested_role is limited to professor/admin by a CHECK. Authenticated users can only update the full_name and institution columns, so they cannot set role or requested_role themselves. admin_set_role is SECURITY DEFINER with search_path set, checks is_admin(), validates new_role, blocks self-demotion, and EXECUTE is revoked from public/anon.",
+    "Unicode PDF: export-smoke.ts runs fine and indic-page1.png renders Hindi, Bengali and Telugu correctly.",
+    ".next/server/app/api/export/route.js.nft.json traces all 8 lib/fonts/*.ttf files.",
+    "Real images: /tmp/deck.pptx has 6 pictures in ppt/media, with Wikimedia captions as slide text.",
+    "My own assets-smoke.ts confirmed images get embedded: a.docx has word/media/image1.jpg, a.pdf has 2 image XObjects, and a.pptx has a picture on the [IMAGE] slide and a diagram picture on the Mermaid slide.",
+    "Note: in the provided export-smoke.ts, the indic PDF/DOCX show '[Image: chloroplast]' because .slice(0,6) drops that query. This is a limitation of the test, not a product bug.",
+    "Mermaid in Chromium: renderMermaidPng logic run with the same config (htmlLabels false) on a Hindi/Bengali/Telugu flowchart. The SVG has no foreignObject, and canvas.toDataURL works (80KB PNG, no SecurityError).",
+    "Unauthenticated API calls return JSON 401: GET and POST /api/export, /api/images/search, documents, forms-create and generate-and-verify. Export now checks auth before validating params, so an unauthenticated request with bad params gets 401, not 400."
+  ],
+  "test_report_links": ["/app/tests/http/test_unauth_api.py", "/app/tests/live/tmp/assets-smoke.ts", "/app/test_reports/pytest/iter4_unauth.xml"],
+  "action_items": [
+    "(Low) Guard the total size of the POST /api/export body against Vercel's 4.5MB request limit, e.g. downscale diagrams or cap the total on the client.",
+    "(Low) Fix the Devanagari/Bengali/Telugu baseline offset relative to Latin text in mixed-script PDF lines.",
+    "(Low) Make admin_set_role raise an error when the target profile is not found.",
+    "(Low) Map legacy role values before adding profiles_role_check in the migration.",
+    "(Blocked, user action) Apply supabase/migrations/20261017223000_harden_profiles_and_sync_schema.sql and reset the admin password so signed-in flows can be tested."
+  ],
+  "critical_code_review_comments": [
+    "The proxy fails closed: missing env vars or an exception both lead to a redirect for protected pages. Good.",
+    "Login validates the role against profiles.role after sign-in and signs the user out on a mismatch. The role selector never grants access by itself. Good.",
+    "toBlocks (DOCX/PDF) and parseSlideDeck (PPTX) count diagrams with different regexes (split pattern vs per-slide count). They agree for standard ```mermaid\\n blocks, but would drift on a fence like '```mermaid' without a newline. Consider using splitGeneratedContent in both places.",
+    "The fullName and institution inputs on signup have no data-testid."
+  ],
+  "updated_files": ["/app/tests/http/test_unauth_api.py", "/app/tests/live/tmp/assets-smoke.ts"],
+  "success_rate": {"backend": "100% (33/33 HTTP, 37/37 unit)", "frontend": "100% of testable unauth UI; signed-in flows blocked"},
+  "seed_data_creation": "None. Supabase was not written to. Only one sign-in attempt, using a non-existent TEST_ email.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Next.js prod server runs on :3005 (no supervisor). Run with: python -m pytest tests/http/test_unauth_api.py (TEACH_EASY_URL defaults to localhost:3005). Mermaid scratch page is at /tmp/mm/index.html, served by python http.server on :8765. Run assets-smoke with: npx tsx --tsconfig tsconfig.json tests/live/tmp/assets-smoke.ts. Signed-in flows still need the migrated DB and working creds."
+}

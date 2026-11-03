@@ -105,7 +105,7 @@ export default function SignupPage() {
                 <Label htmlFor="fullName">Full Name</Label>
                 <div className="relative">
                   <User className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-                  <Input id="fullName" placeholder="John Doe" className="pl-10" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+                  <Input id="fullName" data-testid="signup-name-input" placeholder="John Doe" className="pl-10" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
                 </div>
               </div>
               <div className="space-y-2">
@@ -119,14 +119,14 @@ export default function SignupPage() {
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-                  <Input id="password" data-testid="signup-password-input" type="password" placeholder="••••••••" className="pl-10" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+                  <Input id="password" data-testid="signup-password-input" type="password" placeholder="Create a password" className="pl-10" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="institution">Institution (optional)</Label>
                 <div className="relative">
                   <Building2 className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-                  <Input id="institution" placeholder="University name" className="pl-10" value={institution} onChange={(e) => setInstitution(e.target.value)} />
+                  <Input id="institution" data-testid="signup-institution-input" placeholder="University name" className="pl-10" value={institution} onChange={(e) => setInstitution(e.target.value)} />
                 </div>
               </div>
               <Button type="submit" data-testid="signup-submit-button" className="w-full gap-2" disabled={loading}>

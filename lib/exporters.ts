@@ -145,7 +145,7 @@ export function createPdf(title: string, content: string, assets: ExportAssets =
       pdf.fontSize(options.size).fillColor(options.color ?? '#111827')
       runs.forEach((run, index) => {
         pdf.font(`${FONT_FILES[run.script]}-${options.bold ? 'Bold' : 'Regular'}`)
-        pdf.text(run.text, { continued: index < runs.length - 1, width: width - (options.indent ?? 0), indent: index === 0 ? options.indent ?? 0 : 0, lineGap: 3, paragraphGap: index === runs.length - 1 ? options.gap ?? 6 : 0 })
+        pdf.text(run.text, { baseline: 'alphabetic', continued: index < runs.length - 1, width: width - (options.indent ?? 0), indent: index === 0 ? options.indent ?? 0 : 0, lineGap: 3, paragraphGap: index === runs.length - 1 ? options.gap ?? 6 : 0 })
       })
     }
 

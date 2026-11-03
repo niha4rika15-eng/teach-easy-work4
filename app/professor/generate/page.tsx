@@ -99,6 +99,8 @@ async function readErrorResponse(response: Response, failureMessage: string): Pr
   );
 }
 
+const MAX_EXPORT_DIAGRAM_CHARS = 3_500_000;
+
 export default function GeneratePage() {
   const { profile } = useAuth();
   const [templates, setTemplates] = useState<PromptTemplate[]>(() => withCorePromptTemplates([]));
@@ -223,7 +225,15 @@ export default function GeneratePage() {
 
     const toastId = toast.loading('Preparing download with diagrams and images...');
     try {
-      const diagrams = await Promise.all(extractMermaidBlocks(result.generated_text ?? '').map((code) => renderMermaidPng(code)));
+      const blocks = extractMermaidBlocks(result.generated_text ?? '');
+      let diagrams = await Promise.all(blocks.map((code) => renderMermaidPng(code, 2)));
+      const payloadSize = (items: Array<string | null>) => items.reduce((total, item) => total + (item?.length ?? 0), 0);
+      // Stay under the ~4.5 MB serverless request limit: re-render smaller, then drop the largest diagrams.
+      if (payloadSize(diagrams) > MAX_EXPORT_DIAGRAM_CHARS) diagrams = await Promise.all(blocks.map((code) => renderMermaidPng(code, 1)));
+      while (payloadSize(diagrams) > MAX_EXPORT_DIAGRAM_CHARS) {
+        const largest = diagrams.reduce((best, item, index) => ((item?.length ?? 0) > (diagrams[best]?.length ?? 0) ? index : best), 0);
+        diagrams = diagrams.map((item, index) => (index === largest ? null : item));
+      }
       const response = await fetch('/api/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -68,7 +68,11 @@ begin
   end loop;
 end $$;
 
-update public.profiles set role = lower(role) where role is distinct from lower(role);
+update public.profiles set role = lower(trim(role)) where role is distinct from lower(trim(role));
+-- Map legacy role names so the constraint below cannot abort the migration.
+update public.profiles set role = 'professor' where role in ('teacher', 'faculty', 'instructor', 'educator', 'lecturer');
+update public.profiles set role = 'admin' where role in ('administrator', 'superadmin', 'super_admin');
+update public.profiles set role = 'student' where role is null or role not in ('admin', 'professor', 'student');
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles add constraint profiles_role_check check (role in ('admin', 'professor', 'student'));
 
@@ -152,6 +156,9 @@ begin
     raise exception 'Administrators cannot remove their own admin role' using errcode = '42501';
   end if;
   update public.profiles set role = new_role, requested_role = null where id = target_user;
+  if not found then
+    raise exception 'User % was not found', target_user using errcode = 'P0002';
+  end if;
 end;
 $$;
 revoke all on function public.admin_set_role(uuid, text) from public, anon;
