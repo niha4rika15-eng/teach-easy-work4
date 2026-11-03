@@ -4,25 +4,25 @@
 
 @layer base {
   :root {
-    --background: 140 24% 97%;
-    --foreground: 150 22% 15%;
-    --card: 0 0% 100%;
-    --card-foreground: 150 22% 15%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 150 22% 15%;
-    --primary: 142 48% 42%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 136 32% 91%;
-    --secondary-foreground: 150 26% 20%;
-    --muted: 140 20% 93%;
-    --muted-foreground: 150 10% 42%;
-    --accent: 142 55% 86%;
-    --accent-foreground: 150 30% 20%;
+    --background: 214 68% 18%;
+    --foreground: 0 0% 100%;
+    --card: 214 62% 24%;
+    --card-foreground: 0 0% 100%;
+    --popover: 214 62% 24%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 201 82% 62%;
+    --primary-foreground: 214 68% 14%;
+    --secondary: 214 52% 31%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 214 52% 28%;
+    --muted-foreground: 210 35% 88%;
+    --accent: 199 78% 54%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
-    --border: 140 18% 84%;
-    --input: 140 18% 84%;
-    --ring: 142 48% 42%;
+    --border: 210 48% 42%;
+    --input: 210 48% 42%;
+    --ring: 201 82% 62%;
     --chart-1: 152 76% 50%;
     --chart-2: 52 97% 58%;
     --chart-3: 192 85% 55%;
@@ -60,23 +60,23 @@
 }
 
 .dashboard-shell {
-  --background: 140 24% 97%;
-  --foreground: 150 22% 15%;
-  --card: 0 0% 100%;
-  --card-foreground: 150 22% 15%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 150 22% 15%;
-  --primary: 142 48% 42%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 136 32% 91%;
-  --secondary-foreground: 150 26% 20%;
-  --muted: 140 20% 93%;
-  --muted-foreground: 150 10% 42%;
-  --accent: 142 55% 86%;
-  --accent-foreground: 150 30% 20%;
-  --border: 140 18% 84%;
-  --input: 140 18% 84%;
-  --ring: 142 48% 42%;
+  --background: 214 68% 18%;
+  --foreground: 0 0% 100%;
+  --card: 214 62% 24%;
+  --card-foreground: 0 0% 100%;
+  --popover: 214 62% 24%;
+  --popover-foreground: 0 0% 100%;
+  --primary: 201 82% 62%;
+  --primary-foreground: 214 68% 14%;
+  --secondary: 214 52% 31%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 214 52% 28%;
+  --muted-foreground: 210 35% 88%;
+  --accent: 199 78% 54%;
+  --accent-foreground: 0 0% 100%;
+  --border: 210 48% 42%;
+  --input: 210 48% 42%;
+  --ring: 201 82% 62%;
 }
 
 @layer base {
