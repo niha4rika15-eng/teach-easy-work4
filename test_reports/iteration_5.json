@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 5 checked that the PPT generates correctly and that the public site displays properly. PPT generation passed: gemini ppt_outline in English took 25s and produced 10 slides, 2 mermaid blocks, 5 [IMAGE] hooks with concrete subjects, no LaTeX, Unicode CO₂/C₆H₁₂O₆/H₂O, citations, and validation passed. The export smoke test found real Wikimedia images for all 5 hooks. The deck was converted with LibreOffice and rendered as a contact sheet: every slide has a title, bullets, and either an image, a diagram panel or full-width bullets. There is no overflow and captions are present. The renderMermaidPng logic in Chromium (htmlLabels false) made PNGs for both mermaid blocks with no foreignObject: 720x1078 and 1872x226. With those PNGs passed as assets.diagrams, slides 4 and 6 show pictures instead of text boxes. Website on :3005 at desktop 1920x800 and mobile 390x844 (/, /login, /signup): no console errors, no 4xx responses, no broken images, no horizontal overflow, fonts loaded, correct title. All role cards select on both forms. Links work: Get Started, Sign In, Start Creating, Create Free Account, Sign up, Sign in. All 9 protected routes return 307 to /login?next=... Regression: npm test 38/38, tsc 0 errors, lint 0 errors (4 warnings), HTTP pytest 33/33. A code review of the signed-in pages found a mobile overflow bug on /professor/generate (reproduced in a scratch page) and 'destructive' colours that are green.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "createPptx (lib/exporters.ts addDeckSlide)", "issue": "Very wide images are placed at their natural aspect ratio in the right panel, so they become unreadable thin strips. Examples: the LR mermaid PNG on slide 6 (1872x226) and the Wikimedia 'photosynthesis chemical equation' image on slide 8. Fix: when the aspect ratio is over about 2.5, place the picture full-width under the bullets (or use a short bullet column with a wide image), or render LR flowcharts as TD."},
+      {"endpoint": "lib/exporters.ts captions", "issue": "Image captions in the PPTX are very small (about 7pt) and light grey, so they are barely readable when projected. Consider 9-10pt."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "app/professor/generate/page.tsx line 269 'grid gap-6 lg:grid-cols-2'", "issue": "Below lg the grid has no template columns, so it uses an implicit 'auto' track and the grid items have no min-w-0. Wide content in the results card stretches the whole page on mobile; a scratch reproduction at 390px went to 1018px. Triggers are a code block (GeneratedContent uses [&_pre]:whitespace-pre), the mermaid-source fallback <pre>, a wide SVG, or a wide markdown table. With min-w-0 on the grid items the width stays at 390. Fix: use 'grid grid-cols-1 gap-6 lg:grid-cols-2' or add min-w-0 to both children. The same pattern is in professor/share (line 297) and student/notifications (line 81).", "selector": "[data-testid=generated-content]", "priority": "MEDIUM"},
+      {"component": "app/globals.css --destructive", "issue": "--destructive is set to green (148 42% 27%). Every 'text-destructive' looks green: error messages (admin-users-error, student dashboard alerts, notifications loadError), Trash icons, and the failing NEP score in admin/metrics line 155. A failing score there looks almost the same as a passing one (text-accent green). Use a red hue, e.g. 0 72% 45%.", "selector": ".text-destructive", "priority": "MEDIUM"},
+      {"component": "favicon", "issue": "/favicon.ico returns 404. There is no public/ folder and no app/icon file, so browser tabs show the default icon.", "selector": "link[rel=icon]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "global", "issues": ["No web font is loaded; the body uses the Tailwind system-ui stack. This is acceptable, but next/font (e.g. Inter or Noto Sans with Devanagari/Bengali/Telugu subsets) would make the look consistent across operating systems.", "app-nav wraps <Button> inside <Link>, which nests interactive elements (a > button). This is an accessibility issue; use <Button asChild><Link/></Button>."]},
+      {"screen": "/login, /signup", "issues": ["Looked fine. The faint horizontal banding in the JPEG screenshots is compression of the subtle from-background to-card gradient, not a CSS defect."]}
+    ]
+  },
+  "test_report_links": ["/app/tests/http/test_unauth_api.py", "/app/test_reports/pytest/iteration5_http.xml", "/app/tests/live/generation-smoke.ts", "/app/tests/live/export-smoke.ts", "/app/tests/live/tmp/diagram-deck.ts", "/app/tests/live/tmp/deckshot.ts"],
+  "action_items": [
+    "(Medium) app/professor/generate/page.tsx:269: change to 'grid grid-cols-1 gap-6 lg:grid-cols-2' (same in professor/share:297 and student/notifications:81) so wide code, diagram or table output can't stretch the mobile viewport.",
+    "(Medium) globals.css: make --destructive red in :root, .dark and .dashboard-shell so errors and failing scores are visually distinct from success.",
+    "(Low) In addDeckSlide, give very wide pictures (aspect ratio over 2.5) a full-width layout below the bullets, or render LR mermaid as TD, so slide 6 and slide 8 are readable.",
+    "(Low) Add app/icon.png or app/favicon.ico.",
+    "(Low) Increase PPTX caption font size.",
+    "(Blocked, user action) Migrate the live Supabase schema and reset the admin password to allow signed-in visual testing."
+  ],
+  "critical_code_review_comments": [
+    "renderMermaidPng returns null for any error, including a tainted canvas, and the caller falls back to text. That is correct, but consider logging the reason with console.warn so it can be debugged.",
+    "Mermaid blocks with repeated node IDs and different labels (e.g. E[\"Calvin Cycle (Light-Independent)\"] and later E[\"Calvin Cycle\"]) silently use the last label. The generation guide could ask the model to define each node label once.",
+    "generate/page.tsx is 513 lines; consider splitting the results panel into its own component."
+  ],
+  "updated_files": ["/app/tests/live/tmp/diagram-deck.ts (new scratch script)"],
+  "success_rate": {"backend": "100% (generation and export pipeline, 38 unit tests, 33 HTTP tests)", "frontend": "95% (all public pages and flows pass; 2 medium display bugs found by code review on signed-in pages)"},
+  "seed_data_creation": "None. Nothing was written to Supabase and the Apps Script was not called.",
+  "test_credentials": "Admin sign-in was not attempted, as instructed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Next.js prod runs on :3005 (no supervisor). /tmp/mm is served by python http.server on :8765. /tmp/mm/build.py builds mm2.html from the 2 mermaid blocks in gen-ppt_outline-English.md; the browser saves /tmp/mm/diagram0.png and diagram1.png. Run tests/live/tmp/diagram-deck.ts to build tests/live/out/deck-diagrams.pptx with those PNGs. /tmp/mm/grid.html reproduces the mobile grid blowout. Contact sheets: tests/live/out/deck-grid.png (text-box diagrams) and tests/live/out/deck-diagrams-grid.png (PNG diagrams). Screenshot names from this run: desk_home.jpeg, desk_login.jpeg, desk_signup.jpeg, desk_home_mid.jpeg, desk_home_bottom.jpeg, mob_home_top.jpeg, mob_home_s0-2.jpeg, mob_login_admin.jpeg, mob_signup_admin.jpeg (browser tool output dir).",
+  "rca of the issue": "Mobile overflow: CSS grid with no grid-template-columns creates an implicit 'auto' column. Grid items default to min-width:auto, so their min-content width includes nested scroll containers (pre with overflow-x:auto, or a wide SVG). The column grows past the viewport. Tailwind's grid-cols-1 (minmax(0,1fr)) or min-w-0 on the items clamps it. Verified with a scratch reproduction: 1018px wide becomes 390px."
+}

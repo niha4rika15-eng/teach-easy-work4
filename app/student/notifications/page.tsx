@@ -78,7 +78,7 @@ export default function NotificationsPage() {
           <p className="mt-1 text-muted-foreground">Save an in-app reminder. Push and email delivery are not configured.</p>
         </div>
         {loadError && <Card className="border-destructive/40 bg-destructive/5"><CardContent className="py-4 text-sm text-destructive">Reminders could not be loaded or saved: {loadError}</CardContent></Card>}
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 [&>*]:min-w-0">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Plus className="h-5 w-5 text-primary" /> Schedule Reminder</CardTitle>

@@ -216,7 +216,19 @@ function addDeckSlide(presentation: PptxGenJS, item: DeckSlide, assets: ExportAs
   // A description alone is not enough for a visual panel; such slides use full-width bullets.
   const hasVisual = Boolean(picture || item.image || item.diagram)
   const bullets = item.bullets.length ? item.bullets : ['(No bullet points)']
-  slide.addText(bullets.map((text) => ({ text, options: { bullet: { indent: 18 }, breakLine: true } })), {
+  const bulletRuns = bullets.map((text) => ({ text, options: { bullet: { indent: 18 }, breakLine: true } }))
+  // Very wide pictures (e.g. left-to-right flowcharts, equations) go full-width under the bullets.
+  if (picture && picture.width / picture.height > 2.2) {
+    slide.addText(bulletRuns, { x: 0.7, y: 1.2, w: 11.8, h: 3.4, fontFace, fontSize: 16, color: '1F2937', valign: 'top', paraSpaceAfter: 8, fit: 'shrink' })
+    const size = fit(picture, 11.8 * 96, 2.1 * 96)
+    const w = size.width / 96
+    const h = size.height / 96
+    slide.addImage({ data: `image/${picture.type === 'jpg' ? 'jpeg' : 'png'};base64,${picture.data.toString('base64')}`, x: 0.7 + (11.8 - w) / 2, y: 4.75, w, h })
+    if (picture.caption) slide.addText(picture.caption, { x: 0.7, y: 4.8 + h, w: 11.8, h: 0.4, fontFace: 'Aptos', fontSize: 10, color: '4B5563', align: 'center', fit: 'shrink' })
+    if (item.notes) slide.addNotes(item.notes)
+    return
+  }
+  slide.addText(bulletRuns, {
     x: 0.7, y: 1.3, w: hasVisual ? 7.2 : 11.8, h: 5.4, fontFace, fontSize: 17, color: '1F2937', valign: 'top', paraSpaceAfter: 10, fit: 'shrink',
   })
   if (picture) {
@@ -224,7 +236,7 @@ function addDeckSlide(presentation: PptxGenJS, item: DeckSlide, assets: ExportAs
     const w = size.width / 96
     const h = size.height / 96
     slide.addImage({ data: `image/${picture.type === 'jpg' ? 'jpeg' : 'png'};base64,${picture.data.toString('base64')}`, x: 8.2 + (4.5 - w) / 2, y: 1.3 + (4.6 - h) / 2, w, h })
-    if (picture.caption) slide.addText(picture.caption, { x: 8.2, y: 6.0, w: 4.5, h: 0.5, fontFace: 'Aptos', fontSize: 9, color: '6B7280', align: 'center', fit: 'shrink' })
+    if (picture.caption) slide.addText(picture.caption, { x: 8.2, y: 6.0, w: 4.5, h: 0.6, fontFace: 'Aptos', fontSize: 10, color: '4B5563', align: 'center', fit: 'shrink' })
   } else if (hasVisual) {
     const label = item.diagram ? `Diagram\n\n${mermaidToText(item.diagram).split('\n').slice(0, 10).join('\n')}` : `${item.visual ?? item.image ?? ''}`
     slide.addText(label, {

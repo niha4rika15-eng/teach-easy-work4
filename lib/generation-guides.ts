@@ -38,6 +38,7 @@ const PPT: GenerationGuide = {
 **Visual:** one sentence describing the image, chart, or diagram that should appear on the slide
 [IMAGE: <3-6 word image search query>]   (or, for processes/relationships, a \`\`\`mermaid diagram instead)
 **Speaker notes:** 3 to 5 sentences the presenter can say
+- Mermaid diagrams on slides should be top-down (graph TD) with at most 8 nodes, each node label defined once.
 - Include at least two slides with Mermaid diagrams and at least four [IMAGE: ...] placement hooks.
 - [IMAGE: ...] queries must name a concrete, photographable subject from the topic (e.g. "chloroplast micrograph", "leaf cross section"), never abstract ideas such as agenda, objectives, classroom, discussion, icons, or checklists. Agenda, objectives, and discussion slides need no image.`,
   validate: (text) => {
@@ -60,7 +61,7 @@ Required components, in this order:
 6. "## Key takeaways" — 5-8 short bullets, each starting with a bold keyword.
 7. "## Legend" — explain diagram symbols.
 Use visual layout cues: blockquote callouts like "> KEY IDEA:", "> REMEMBER:", "> COMMON MISTAKE:".
-Mermaid must be valid syntax: quote every node label, avoid parentheses inside unquoted labels, one statement per line.`,
+Mermaid must be valid syntax: quote every node label, define each node's label only once, prefer top-down (graph TD) layouts, one statement per line.`,
   validate: (text) => {
     if (count(/```mermaid/g, text) < 2) return 'Visual notes need at least two Mermaid diagrams.'
     if (count(/^\|.*\|\s*$/gm, text) < 4) return 'Visual notes need Markdown summary tables.'

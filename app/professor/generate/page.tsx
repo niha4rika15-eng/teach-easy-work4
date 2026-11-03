@@ -266,7 +266,7 @@ export default function GeneratePage() {
           <p className="mt-1 text-muted-foreground">Generate content grounded in your source documents, with passages cited for review.</p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 [&>*]:min-w-0">
           {/* Configuration */}
           <div className="space-y-6">
             <Card>

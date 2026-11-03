@@ -56,12 +56,10 @@ export function AppNav({ children }: { children: ReactNode }) {
             </Link>
             <div className="hidden items-center gap-1 sm:flex">
               {(items || []).map((item) => (
-                <Link key={item.href} href={item.href}>
-                  <Button variant="ghost" size="sm" className={`group gap-2 rounded-lg text-muted-foreground transition-all duration-200 hover:-translate-y-0.5 hover:bg-secondary hover:text-primary hover:shadow-sm ${pathname === item.href ? 'bg-secondary text-primary shadow-sm' : ''}`}>
+                <Button key={item.href} asChild variant="ghost" size="sm" className={`group gap-2 rounded-lg text-muted-foreground transition-all duration-200 hover:-translate-y-0.5 hover:bg-secondary hover:text-primary hover:shadow-sm ${pathname === item.href ? 'bg-secondary text-primary shadow-sm' : ''}`}><Link href={item.href} data-testid={`nav-link-${item.href.replace(/\//g, '-').slice(1)}`}>
                     <item.icon className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" />
                     {item.label}
-                  </Button>
-                </Link>
+                  </Link></Button>
               ))}
             </div>
           </div>
@@ -81,12 +79,10 @@ export function AppNav({ children }: { children: ReactNode }) {
         {/* Mobile nav */}
         <div className="grid grid-cols-2 gap-1 border-t border-border/30 px-3 py-2 sm:hidden">
           {(items || []).map((item) => (
-            <Link key={item.href} href={item.href}>
-              <Button variant="ghost" size="sm" className={`group min-w-0 justify-start gap-1.5 rounded-lg px-2 text-xs transition-all duration-200 hover:-translate-y-0.5 hover:bg-secondary hover:text-primary hover:shadow-sm ${pathname === item.href ? 'bg-secondary text-primary shadow-sm' : ''}`}>
+            <Button key={item.href} asChild variant="ghost" size="sm" className={`group min-w-0 justify-start gap-1.5 rounded-lg px-2 text-xs transition-all duration-200 hover:-translate-y-0.5 hover:bg-secondary hover:text-primary hover:shadow-sm ${pathname === item.href ? 'bg-secondary text-primary shadow-sm' : ''}`}><Link href={item.href} data-testid={`nav-mobile-link-${item.href.replace(/\//g, '-').slice(1)}`}>
                 <item.icon className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" />
                 {item.label}
-              </Button>
-            </Link>
+              </Link></Button>
           ))}
         </div>
       </nav>
