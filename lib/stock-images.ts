@@ -26,7 +26,10 @@ type CommonsResponse = {
   }
 }
 
-const USER_AGENT = 'TeachEasy/1.0 (educational content generator)'
+// Wikimedia asks API clients for a descriptive User-Agent with contact details.
+const USER_AGENT = 'TeachEasy/1.0 (https://teach-easy.vercel.app; educational slide generator) Node.js'
+const cache = new Map<string, StockImage | null>()
+let throttledUntil = 0
 const stripHtml = (value = '') => value.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
 
 const STOP_WORDS = new Set(['and', 'of', 'the', 'a', 'an', 'with', 'for', 'in', 'on', 'to', 'diagram', 'labeled', 'illustration', 'icon', 'icons', 'structure'])
@@ -39,14 +42,40 @@ export function imageQueryVariants(query: string) {
 
 // Openly licensed photos and illustrations from Wikimedia Commons (no API key required).
 export async function searchStockImage(query: string): Promise<StockImage | null> {
-  for (const variant of imageQueryVariants(query)) {
-    const found = await searchCommons(variant)
-    if (found) return found
+  const key = query.trim().toLowerCase()
+  if (cache.has(key)) return cache.get(key) ?? null
+  const keywords = imageQueryVariants(query)[1]?.split(' ').filter((word) => word.length >= 3) ?? []
+  for (const variant of imageQueryVariants(query).slice(0, 3)) {
+    if (Date.now() < throttledUntil) return null
+    const found = await searchCommons(variant, keywords)
+    if (found) {
+      cache.set(key, found)
+      return found
+    }
   }
+  cache.set(key, null)
   return null
 }
 
-async function searchCommons(query: string): Promise<StockImage | null> {
+// Runs searches a few at a time so a long deck does not trip Wikimedia's rate limit.
+export async function searchStockImages(queries: string[], concurrency = 3) {
+  const results = new Map<string, StockImage>()
+  for (let offset = 0; offset < queries.length; offset += concurrency) {
+    await Promise.all(queries.slice(offset, offset + concurrency).map(async (query) => {
+      const found = await searchStockImage(query)
+      if (found) results.set(query, found)
+    }))
+  }
+  return results
+}
+
+// A result is relevant only if its file name or description mentions one of the query's keywords.
+function isRelevant(text: string, keywords: string[]) {
+  const haystack = text.toLowerCase()
+  return !keywords.length || keywords.some((word) => haystack.includes(word.replace(/s$/, '')))
+}
+
+async function searchCommons(query: string, keywords: string[]): Promise<StockImage | null> {
   const params = new URLSearchParams({
     action: 'query',
     format: 'json',
@@ -65,6 +94,10 @@ async function searchCommons(query: string): Promise<StockImage | null> {
       signal: AbortSignal.timeout(8_000),
       next: { revalidate: 86_400 },
     })
+    if (response.status === 429) {
+      throttledUntil = Date.now() + 60_000
+      return null
+    }
     if (!response.ok) return null
     const payload = await response.json() as CommonsResponse
     const pages = Object.values(payload.query?.pages ?? {}).sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
@@ -73,6 +106,7 @@ async function searchCommons(query: string): Promise<StockImage | null> {
       if (!info?.thumburl || !info.thumbwidth || !info.thumbheight) continue
       if (info.mime !== 'image/jpeg' && info.mime !== 'image/png') continue
       const metadata = info.extmetadata ?? {}
+      if (!isRelevant(`${page.title ?? ''} ${stripHtml(metadata.ImageDescription?.value)} ${stripHtml(metadata.ObjectName?.value)}`, keywords)) continue
       return {
         url: info.thumburl,
         width: info.thumbwidth,

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { jsonError, requireProfessorOrAdmin } from '@/lib/api-auth'
 import { extractImageQueries } from '@/lib/content-segments'
 import { createDocx, createPdf, createPptx, stockCaption, toExportImage, type ExportAssets, type ExportImage } from '@/lib/exporters'
-import { downloadStockImage, searchStockImage } from '@/lib/stock-images'
+import { downloadStockImage, searchStockImages } from '@/lib/stock-images'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -33,12 +33,10 @@ function decodeDiagram(dataUrl: string | null): ExportImage | null {
 
 async function loadStockImages(content: string) {
   const images = new Map<string, ExportImage>()
-  const queries = extractImageQueries(content).slice(0, MAX_IMAGES)
-  await Promise.all(queries.map(async (query) => {
-    const found = await searchStockImage(query)
-    if (!found) return
-    const bytes = await downloadStockImage(found)
-    const image = bytes ? toExportImage(bytes, stockCaption(found)) : null
+  const found = await searchStockImages(extractImageQueries(content).slice(0, MAX_IMAGES))
+  await Promise.all(Array.from(found).map(async ([query, stock]) => {
+    const bytes = await downloadStockImage(stock)
+    const image = bytes ? toExportImage(bytes, stockCaption(stock)) : null
     if (image) images.set(query, image)
   }))
   return images

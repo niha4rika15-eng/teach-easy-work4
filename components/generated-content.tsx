@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ImageIcon } from 'lucide-react';
-import { splitGeneratedContent } from '@/lib/content-segments';
+import { cleanMathMarkup, splitGeneratedContent } from '@/lib/content-segments';
 
 export { splitGeneratedContent };
 
@@ -119,7 +119,7 @@ export function GeneratedContent({ text }: { text: string }) {
       {splitGeneratedContent(text).map((segment, index) => {
         if (segment.kind === 'mermaid') return <MermaidDiagram key={index} code={segment.value} />;
         if (segment.kind === 'image') return <ImageHook key={index} query={segment.value} />;
-        return <ReactMarkdown key={index} remarkPlugins={[remarkGfm]}>{segment.value}</ReactMarkdown>;
+        return <ReactMarkdown key={index} remarkPlugins={[remarkGfm]}>{cleanMathMarkup(segment.value)}</ReactMarkdown>;
       })}
     </div>
   );

@@ -18,6 +18,7 @@ export function languageInstruction(language: string) {
     `Write every heading, bullet, explanation, table cell, and speaker note in ${language}, using ${script}. Do not transliterate into Latin letters.`,
     'Keep technical terms understandable: give the English term in parentheses after its first use when helpful.',
     'Inside Mermaid diagrams, always wrap node labels in double quotes, e.g. A["लेबल"], so any script renders correctly.',
+    'Never use LaTeX or $...$ math. Write formulas with Unicode, e.g. 6CO₂ + 6H₂O → C₆H₁₂O₆ + 6O₂.',
   ].join(' ')
 }
 
@@ -37,7 +38,8 @@ const PPT: GenerationGuide = {
 **Visual:** one sentence describing the image, chart, or diagram that should appear on the slide
 [IMAGE: <3-6 word image search query>]   (or, for processes/relationships, a \`\`\`mermaid diagram instead)
 **Speaker notes:** 3 to 5 sentences the presenter can say
-- Include at least two slides with Mermaid diagrams and at least four [IMAGE: ...] placement hooks.`,
+- Include at least two slides with Mermaid diagrams and at least four [IMAGE: ...] placement hooks.
+- [IMAGE: ...] queries must name a concrete, photographable subject from the topic (e.g. "chloroplast micrograph", "leaf cross section"), never abstract ideas such as agenda, objectives, classroom, discussion, icons, or checklists. Agenda, objectives, and discussion slides need no image.`,
   validate: (text) => {
     const slides = count(/^##\s*Slide\s+\d+/gim, text)
     if (slides < 8) return `Only ${slides} slides were produced; at least 8 complete slides are required.`

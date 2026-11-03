@@ -76,3 +76,10 @@ test('image search falls back to shorter keyword queries', async () => {
     'chloroplast ultrastructure labeled thylakoid stroma diagram', 'chloroplast ultrastructure thylakoid stroma', 'chloroplast ultrastructure', 'chloroplast',
   ])
 })
+
+test('LaTeX-style math becomes readable Unicode and Mermaid has a text fallback', async () => {
+  const { cleanMathMarkup, mermaidToText } = await import('../lib/content-segments')
+  assert.equal(cleanMathMarkup('Equation: $6CO_2 + 6H_2O \\rightarrow C_6H_{12}O_6 + 6O_2$'), 'Equation: 6CO₂ + 6H₂O → C₆H₁₂O₆ + 6O₂')
+  assert.equal(cleanMathMarkup('Costs $5 and $10'), 'Costs $5 and $10')
+  assert.equal(mermaidToText('graph TD\nA["Light"] --> B["ATP"]\nB -->|"powers"| C["Calvin cycle"]'), 'Light → ATP\nATP → (powers) Calvin cycle')
+})

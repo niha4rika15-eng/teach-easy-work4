@@ -3,7 +3,9 @@ import path from 'node:path'
 import { Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun, AlignmentType } from 'docx'
 import PDFDocument from 'pdfkit'
 import PptxGenJS from 'pptxgenjs'
-import { hasIndicScript, splitGeneratedContent, splitScriptRuns, stripInlineMarkdown, type Script } from './content-segments'
+import { cleanMathMarkup, hasIndicScript, mermaidToText, splitGeneratedContent, splitScriptRuns, stripInlineMarkdown as stripMarkdownOnly, type Script } from './content-segments'
+
+const stripInlineMarkdown = (value: string) => cleanMathMarkup(stripMarkdownOnly(value))
 import type { StockImage } from './stock-images'
 
 export type ExportImage = { data: Buffer; width: number; height: number; type: 'png' | 'jpg'; caption?: string }
@@ -60,7 +62,7 @@ function toBlocks(content: string, assets: ExportAssets): Block[] {
   for (const segment of splitGeneratedContent(content.replace(/\r\n?/g, '\n'))) {
     if (segment.kind === 'mermaid') {
       const diagram = assets.diagrams[diagramIndex++] ?? null
-      blocks.push(diagram ? { kind: 'image', image: diagram, label: 'Diagram' } : { kind: 'code', text: segment.value })
+      blocks.push(diagram ? { kind: 'image', image: diagram, label: 'Diagram' } : { kind: 'code', text: mermaidToText(segment.value) })
       continue
     }
     if (segment.kind === 'image') {
@@ -211,7 +213,8 @@ function addDeckSlide(presentation: PptxGenJS, item: DeckSlide, assets: ExportAs
   slide.background = { color: 'F5FAF7' }
   slide.addText(item.title, { x: 0.6, y: 0.35, w: 12, h: 0.7, fontFace, fontSize: 26, bold: true, color: '14532D', fit: 'shrink' })
   const picture = (item.diagramIndex !== null ? assets.diagrams[item.diagramIndex] : null) ?? (item.image ? assets.images.get(item.image) : undefined) ?? null
-  const hasVisual = Boolean(picture || item.image || item.diagram || item.visual)
+  // A description alone is not enough for a visual panel; such slides use full-width bullets.
+  const hasVisual = Boolean(picture || item.image || item.diagram)
   const bullets = item.bullets.length ? item.bullets : ['(No bullet points)']
   slide.addText(bullets.map((text) => ({ text, options: { bullet: { indent: 18 }, breakLine: true } })), {
     x: 0.7, y: 1.3, w: hasVisual ? 7.2 : 11.8, h: 5.4, fontFace, fontSize: 17, color: '1F2937', valign: 'top', paraSpaceAfter: 10, fit: 'shrink',
@@ -223,13 +226,14 @@ function addDeckSlide(presentation: PptxGenJS, item: DeckSlide, assets: ExportAs
     slide.addImage({ data: `image/${picture.type === 'jpg' ? 'jpeg' : 'png'};base64,${picture.data.toString('base64')}`, x: 8.2 + (4.5 - w) / 2, y: 1.3 + (4.6 - h) / 2, w, h })
     if (picture.caption) slide.addText(picture.caption, { x: 8.2, y: 6.0, w: 4.5, h: 0.5, fontFace: 'Aptos', fontSize: 9, color: '6B7280', align: 'center', fit: 'shrink' })
   } else if (hasVisual) {
-    const label = item.diagram ? `Diagram\n\n${item.diagram.split('\n').slice(0, 12).join('\n')}` : `Image: ${item.image ?? ''}\n\n${item.visual ?? ''}`
+    const label = item.diagram ? `Diagram\n\n${mermaidToText(item.diagram).split('\n').slice(0, 10).join('\n')}` : `${item.visual ?? item.image ?? ''}`
     slide.addText(label, {
       shape: presentation.ShapeType.roundRect, x: 8.2, y: 1.3, w: 4.5, h: 4.6, fill: { color: 'E8F3EC' }, line: { color: '86B49A', dashType: 'dash' },
       fontFace, fontSize: 12, color: '14532D', align: 'center', valign: 'middle', fit: 'shrink',
     })
   }
-  if (item.notes) slide.addNotes(item.notes)
+  const notes = [item.notes, !hasVisual && item.visual ? `Suggested visual: ${item.visual}` : null].filter(Boolean).join('\n\n')
+  if (notes) slide.addNotes(notes)
 }
 
 export async function createPptx(title: string, content: string, assets: ExportAssets = EMPTY_ASSETS) {

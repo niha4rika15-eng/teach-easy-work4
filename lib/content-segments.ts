@@ -53,3 +53,31 @@ export function hasIndicScript(text: string) {
 export function stripInlineMarkdown(value: string) {
   return value.replace(/\*\*(.+?)\*\*/g, '$1').replace(/__(.+?)__/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/\[(.+?)\]\((.+?)\)/g, '$1').trim();
 }
+
+const SUBSCRIPTS: Record<string, string> = { 0: '₀', 1: '₁', 2: '₂', 3: '₃', 4: '₄', 5: '₅', 6: '₆', 7: '₇', 8: '₈', 9: '₉', '+': '₊', '-': '₋' };
+const SUPERSCRIPTS: Record<string, string> = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹', '+': '⁺', '-': '⁻' };
+const LATEX_SYMBOLS: Record<string, string> = { rightarrow: '→', to: '→', leftarrow: '←', leftrightarrow: '↔', rightleftharpoons: '⇌', times: '×', cdot: '·', pm: '±', approx: '≈', leq: '≤', geq: '≥', neq: '≠', degree: '°', Delta: 'Δ', delta: 'δ', alpha: 'α', beta: 'β', gamma: 'γ', lambda: 'λ', mu: 'μ', pi: 'π' };
+
+const mapChars = (value: string, table: Record<string, string>) => Array.from(value).map((char) => table[char] ?? char).join('');
+
+// Turns simple LaTeX the model may emit ($CO_2$, \rightarrow, \text{...}) into readable Unicode.
+export function cleanMathMarkup(text: string) {
+  const convert = (math: string) => math
+    .replace(/\\(?:text|mathrm|mathbf)\{([^{}]*)\}/g, '$1')
+    .replace(/\\([A-Za-z]+)/g, (match, name: string) => LATEX_SYMBOLS[name] ?? match)
+    .replace(/_\{([0-9+-]+)\}|_([0-9+-])/g, (_, group: string | undefined, single: string | undefined) => mapChars(group ?? single ?? '', SUBSCRIPTS))
+    .replace(/\^\{([0-9+-]+)\}|\^([0-9+-])/g, (_, group: string | undefined, single: string | undefined) => mapChars(group ?? single ?? '', SUPERSCRIPTS))
+    .replace(/[{}]/g, '')
+    .replace(/\s{2,}/g, ' ');
+  return text.replace(/\$\$([^$]+)\$\$|\$([^$\n]{1,200})\$/g, (match, block: string | undefined, inline: string | undefined) => (block !== undefined || /[_^\\]/.test(inline ?? '') ? convert(block ?? inline ?? '') : match));
+}
+
+// Readable text version of a Mermaid diagram, used when it cannot be embedded as a picture.
+export function mermaidToText(code: string) {
+  const labels = new Map<string, string>();
+  for (const match of Array.from(code.matchAll(/([A-Za-z0-9_]+)\s*[[({]+"?([^\])}"]+)"?[\])}]+/g))) labels.set(match[1], match[2].trim());
+  const label = (id: string) => labels.get(id) ?? id;
+  const edges = Array.from(code.matchAll(/([A-Za-z0-9_]+)(?:\s*[[({]+[^\])}]*[\])}]+)?\s*(?:-->|---|==>|-\.->|--\s*[^-]+\s*-->)\s*(?:\|"?([^|"]*)"?\|\s*)?([A-Za-z0-9_]+)/g));
+  if (!edges.length) return Array.from(labels.values()).join(' • ');
+  return edges.map((edge) => `${label(edge[1])} → ${edge[2] ? `(${edge[2].trim()}) ` : ''}${label(edge[3])}`).join('\n');
+}

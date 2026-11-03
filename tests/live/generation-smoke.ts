@@ -46,12 +46,13 @@ const jobs = only ? ALL_JOBS.filter(([type, language]) => `${type}:${language}` 
 Promise.allSettled(jobs.map(([type, language, variables]) => run(type, language, variables))).then(async (results) => {
   results.forEach((result, index) => { if (result.status === 'rejected') console.log('FAILED', jobs[index][0], jobs[index][1], (result.reason as Error).message) })
   const deck = results[0]
+  const { writeFileSync, mkdirSync } = await import('node:fs')
+  mkdirSync('tests/live/out', { recursive: true })
+  results.forEach((result, index) => { if (result.status === 'fulfilled') writeFileSync(`tests/live/out/gen-${jobs[index][0]}-${jobs[index][1]}.md`, result.value) })
   if (!only && deck.status === 'fulfilled') {
     const { createPptx, createDocx } = await import('../../lib/exporters')
     console.log('pptx bytes', (await createPptx('Photosynthesis', deck.value)).length)
     const hindi = results[1]
     if (hindi.status === 'fulfilled') console.log('hindi docx bytes', (await createDocx('Notes', hindi.value)).length)
-    const { writeFileSync } = await import('node:fs')
-    results.forEach((result, index) => { if (result.status === 'fulfilled') writeFileSync(`/tmp/gen-${jobs[index][0]}-${jobs[index][1]}.md`, result.value) })
   }
 })
