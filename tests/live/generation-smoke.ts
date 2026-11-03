@@ -21,7 +21,7 @@ async function run(type: string, language: string, variables: Record<string, str
   if (problem) text = await createChatCompletion([{ role: 'system', content: system }, { role: 'user', content: user }, { role: 'user', content: `Fix: ${problem} Rewrite completely.` }], { maxTokens: guide.maxTokens, maxAttempts: 2, timeoutMs: 150_000 })
   const evaluation = parseGenerationEvaluation(await createChatCompletion(buildEvaluationMessages(text, [source]), { jsonObject: true, maxTokens: 2000, maxAttempts: 2 }), true)
   const segments = splitGeneratedContent(text)
-  const script = language === 'Hindi' ? /[\u0900-\u097F]/ : language === 'Telugu' ? /[\u0C00-\u0C7F]/ : language === 'Bengali' ? /[\u0980-\u09FF]/ : /[A-Za-z]/
+  const script = language === 'Hindi' || language === 'Marathi' ? /[\u0900-\u097F]/ : language === 'Telugu' ? /[\u0C00-\u0C7F]/ : language === 'Bengali' ? /[\u0980-\u09FF]/ : /[A-Za-z]/
   console.log(JSON.stringify({
     type, language, seconds: Math.round((Date.now() - started) / 1000), chars: text.length,
     firstValidation: problem ?? 'pass', finalValidation: guide.validate(text) ?? 'pass',
@@ -39,6 +39,7 @@ const ALL_JOBS: Array<[string, string, Record<string, string>]> = [
   ['visual_notes', 'Hindi', { topic: 'Photosynthesis', audience: 'Class 11', diagram_focus: 'light and dark reactions' }],
   ['word_brief', 'Telugu', { topic: 'Photosynthesis', syllabus: 'Unit 4: light reactions, Calvin cycle, factors affecting photosynthesis', audience: 'Undergraduate', detail_level: 'detailed' }],
   ['word_brief', 'Bengali', { topic: 'Photosynthesis', syllabus: 'Calvin cycle', audience: 'Class 12', detail_level: 'standard' }],
+  ['word_brief', 'Marathi', { topic: 'Photosynthesis', syllabus: 'Light reactions and Calvin cycle', audience: 'Class 11', detail_level: 'standard' }],
 ]
 const only = process.argv[2]
 const jobs = only ? ALL_JOBS.filter(([type, language]) => `${type}:${language}` === only) : ALL_JOBS

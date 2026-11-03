@@ -1,0 +1,38 @@
+{
+  "summary": "Checked the 6 Teach Easy fixes. Static checks: npm test passed 33/33, npx tsc --noEmit exited 0, npm run lint showed 0 errors and 4 old warnings, and npm run build in an isolated copy (/tmp/buildcopy) exited 0 and lists /admin/users. No custom secret names appear in .next/static. HTTP regression test_unauth_api.py passed 17/17 on :3005. The pages /, /login, /signup, /admin, /admin/users, /admin/metrics and /professor/generate return 200. /admin/users redirects to /login in the browser when signed out. generate-and-verify and forms-create return JSON 401 when signed out. Live Gemini smoke test with only geminiapi_script set, all jobs passed on the first validation: (a) ppt_outline (English) gave 10 slides with 8 [IMAGE] hooks and 2 Mermaid diagrams. parseSlideDeck found 10 slides, each with bullets, a Visual line and speaker notes. createPptx gave 10 slides and 10 notes slides (155 KB). (b) visual_notes (Hindi) is in Devanagari with 2 Mermaid diagrams. (c) word_brief in Telugu (6.2k chars), Bengali (6.0k) and Marathi (5.5k, a new job I added) is in native script with [S1] citations. All scores were non-null (NEP 75-88, quality 9, risk 0). All 5 generated Mermaid diagrams (2 Hindi, 2 PPT, 1 Telugu) rendered to SVG in Chromium with mermaid 12.3.0 and the component's settings (securityLevel strict, theme neutral). Devanagari labels display correctly. One Supabase password sign-in for niha4rika15@gmail.com returned 400 invalid_credentials, so this is still blocked. I made no Supabase writes and no Apps Script calls.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/generate-and-verify", "issue": "source_content allows 200,000 chars, but pasted text is chunked with a 400-char overlap (about 12.5% duplication). Add up to 12 retrieved passages and labels, and pastes of roughly 175k+ chars hit the 240k context cap and get a 413. The validation limit and the real limit do not match, so either lower the schema max or chunk the pasted text without overlap."},
+      {"endpoint": "/api/generate-and-verify", "issue": "If the model leaves out [S#] citations when sources exist, the route returns 502 straight away. It does not use the existing one-time validation retry, so the whole (slow) generation is lost. Consider adding the citation check to the guide retry."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/tests/http/test_unauth_api.py", "/app/tests/live/generation-smoke.ts", "/app/test_reports/pytest/pytest_results_iter3.xml"],
+  "action_items": [
+    "BLOCKED (not failed): reset the niha4rika15@gmail.com password in Supabase Auth and apply the migrations, including 20261017223000, which promotes this account to admin. After that, the signed-in professor generate UI, the admin dashboard and users list with data, and quiz publishing can be tested end to end.",
+    "BLOCKED: redeploy the Apps Script (Execute as: Me, Who has access: Anyone) and update google_gorm_api. Then test Google Forms publishing for real.",
+    "Optional: line up the 200k source_content schema limit with the 240k context cap (see minor issue)."
+  ],
+  "critical_code_review_comments": [
+    "generate-and-verify: pasted text is fully included (all chunks, similarity 1, no filter), document retrieval is capped at 12, there is one validation retry per template guide, and evaluation is tried twice. When evaluation fails, scores stay null, evaluation_warning is set, and the UI shows a 'Model-estimated rubric scores' card with 'Not evaluated' (lib/scores.ts). All of this is correct.",
+    "Retry selection `if (!guide.validate(retried) || retried.length > generatedText.length)` is reasonable. The retry does not re-check citations, though.",
+    "generated-content.tsx: mermaid is imported dynamically on the client with securityLevel strict, and the source is shown if rendering fails. remark-gfm tables and [IMAGE:] figure placeholders work. Small issue: a failed mermaid.render can leave its temporary DOM node behind. This is harmless.",
+    "exporters.ts: PPTX shows Mermaid diagrams as plain source text in a dashed box, not as rendered images. That is acceptable as a 'diagram hook', but tell the user. createPdf still rejects text outside Latin-1, so Hindi/Bengali/Telugu/Marathi can only be exported as DOCX or PPTX.",
+    "parseSlideDeck only recognises '## Slide N' headings. If the model writes '# Slide' or '### Slide', export falls back to 6-line chunks. Generation always used ## in testing.",
+    "forms-create: the iteration-1 issue is fixed. The student link must be /viewform or forms.gle, and the editor link must be /edit. A 401 or 403 is turned into a clear redeploy message.",
+    "Migration: is_admin() only checks profiles.role, so setting app_metadata.role is redundant but harmless. The profile backfill runs before the admin UPDATE, so the account is promoted even if its profile was missing.",
+    "Marathi and Hindi share the Devanagari range, so the smoke test cannot tell them apart by script. I checked visually that the Marathi output is Devanagari."
+  ],
+  "updated_files": ["/app/tests/live/generation-smoke.ts (added word_brief:Marathi job + Devanagari script check for Marathi)"],
+  "success_rate": {"backend": "100% (33/33 unit, 17/17 HTTP, tsc/lint/build clean, 5/5 live AI jobs, 5/5 Mermaid renders)", "frontend": "100% of reachable unauthenticated UI (login renders with testids, admin redirect works); signed-in UI BLOCKED"},
+  "test_credentials": "niha4rika15@gmail.com (from /app/memory/test_credentials.md) - one password sign-in attempt returned 400 invalid_credentials",
+  "seed_data_creation": "None. No Supabase writes, no sign-ups, no Apps Script calls.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Build in isolation: tar the repo excluding node_modules/.next into /tmp/buildcopy and cp -a node_modules there. Live smoke: set -a; . backend/.env; set +a; export geminiapi_script=$GEMINI_API_KEY; unset GEMINI_API_KEY OPENAI_API_KEY; npx tsx --tsconfig tsconfig.json tests/live/generation-smoke.ts [type:Language]. Outputs are written to /tmp/gen-*.md. Mermaid check: serve node_modules/mermaid/dist/mermaid.min.js plus a JSON of the extracted diagrams through python http.server and call mermaid.render in Playwright. Once the Supabase password is reset and migrations are applied, test the professor generate UI (Not evaluated state, GeneratedContent rendering), the /admin/users list and the Google Forms publish."
+}

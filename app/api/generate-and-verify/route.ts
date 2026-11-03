@@ -5,7 +5,6 @@ import { getGenerationGuide, languageInstruction } from '@/lib/generation-guides
 import { createChatCompletion, getAiProvider } from '@/lib/ai'
 import { buildEvaluationMessages, parseGenerationEvaluation, type GenerationEvaluation } from '@/lib/generation-evaluation'
 import { createEmbedding, getMinimumRelevantSimilarity } from '@/lib/rag/embeddings'
-import { chunkDocument } from '@/lib/rag/chunking'
 import { retrieveDocumentChunks, selectRelevantChunks, type EvidenceChunk } from '@/lib/rag/retrieval'
 import { MAX_SYNTHESIS_CONTEXT_CHARACTERS } from '@/lib/rag/context'
 
@@ -13,6 +12,7 @@ export const runtime = 'nodejs'
 export const maxDuration = 300
 
 const MAX_DOCUMENT_PASSAGES = 12
+const PASTED_PASSAGE_CHARACTERS = 4_000
 
 const requestSchema = z.object({
   template_type: z.enum(['lesson_plan', 'quiz', 'ppt_outline', 'word_brief', 'visual_notes', 'research_paper']),
@@ -69,14 +69,18 @@ export async function POST(request: Request) {
     }
     // Text the professor pasted is always used in full: it is explicit input, not a retrieval candidate.
     if (input.source_content?.trim()) {
-      evidence.push(...chunkDocument(input.source_content).map((chunk) => ({
-        id: `pasted-${chunk.index}`,
-        document_id: 'pasted-source',
-        title: 'Pasted source text',
-        chunk_index: chunk.index,
-        content: chunk.content,
-        similarity: 1,
-      })))
+      // Non-overlapping split so the full pasted text fits the context budget exactly once.
+      const pasted = input.source_content.trim()
+      for (let offset = 0, index = 0; offset < pasted.length; offset += PASTED_PASSAGE_CHARACTERS, index += 1) {
+        evidence.push({
+          id: `pasted-${index}`,
+          document_id: 'pasted-source',
+          title: 'Pasted source text',
+          chunk_index: index,
+          content: pasted.slice(offset, offset + PASTED_PASSAGE_CHARACTERS),
+          similarity: 1,
+        })
+      }
     }
 
     const context = evidence.map((item, index) =>
@@ -108,14 +112,22 @@ export async function POST(request: Request) {
 
     const messages: Array<{ role: 'system' | 'user'; content: string }> = [{ role: 'system', content: systemMessage }, { role: 'user', content: userMessage }]
     const completionOptions = { jsonObject: input.template_type === 'quiz', maxTokens: guide.maxTokens, maxAttempts: 2, timeoutMs: 150_000 }
+    const findProblem = (text: string) => {
+      const formatProblem = guide.validate(text)
+      if (formatProblem) return formatProblem
+      const labels = Array.from(text.matchAll(/\[S(\d+)\]/g)).map((match) => Number(match[1]))
+      if (labels.some((label) => label < 1 || label > evidence.length)) return `Only cite labels [S1] to [S${evidence.length}]; do not invent citations.`
+      if (evidence.length && !labels.length) return 'Add inline citations using the exact labels [S1], [S2], etc. for claims drawn from the reference passages.'
+      return null
+    }
     let generatedText = await createChatCompletion(messages, completionOptions)
-    const firstProblem = guide.validate(generatedText)
+    const firstProblem = findProblem(generatedText)
     if (firstProblem) {
       const retried = await createChatCompletion([
         ...messages,
         { role: 'user', content: `Your previous draft did not meet the output requirements: ${firstProblem} Rewrite the complete output so it satisfies every requirement.` },
       ], completionOptions)
-      if (!guide.validate(retried) || retried.length > generatedText.length) generatedText = retried
+      if (!findProblem(retried) || retried.length > generatedText.length) generatedText = retried
     }
 
     if (input.template_type === 'quiz') {
