@@ -1,0 +1,22 @@
+{
+  "summary": "Checked the change to custom deployment env var names. All server secrets are read through lib/env.ts. getOpenAiApiKey checks openai_api_key, then OPENAI_API_KEY, then openai_apikey. getGeminiApiKey checks geminiapi_script, then GEMINI_API_KEY. getGoogleAppsScriptUrl checks google_gorm_api, then GOOGLE_APPS_SCRIPT_URL, then GOOGLE_FORM_API. Values are trimmed, so blank or whitespace values fall through to the next name. No old uppercase names are read anywhere in app/, lib/, components/, hooks/, proxy.ts or next.config.js outside lib/env.ts. Supabase NEXT_PUBLIC names are unchanged. npm test passed 28/28 (including the new custom env names test), npx tsc --noEmit exited 0, and npm run lint reported 0 errors and 4 warnings. npm run build succeeded with exit 0 and 17 routes; it was run in an isolated copy of the repo with GEMINI_API_KEY, OPENAI_API_KEY and GOOGLE_APPS_SCRIPT_URL unset, so the .next folder of the running :3005 server was not touched. The custom names stay as runtime process.env reads in the server chunks (not inlined) and do not appear in .next/static. The :3005 server was confirmed to be running with geminiapi_script and google_gorm_api set (values not read). On it, test_unauth_api.py passed 17/17: every protected endpoint returns JSON 401, export with invalid params returns 400, and the public pages render. Live tsx check with only geminiapi_script set: provider is 'gemini', createEmbedding returns a 1536-dim vector with norm 1.0. With no AI keys, importing lib/ai does not throw, and calling getAiProvider throws a clear message that the routes catch.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/tests/http/test_unauth_api.py", "/app/tests/live_env_check.ts", "/app/test_reports/pytest/pytest_results_iter2.xml"],
+  "action_items": [
+    "Optional: update the stale note in /app/memory/PRD.md that says 'set GEMINI_API_KEY in Vercel'; it should now say geminiapi_script.",
+    "Carry-over from iteration 1, still open: the forms-create student-link validation accepts /edit URLs, and the storage.objects GRANT/REVOKE in the migration may fail on hosted Supabase."
+  ],
+  "critical_code_review_comments": [
+    "lib/env.ts is small, correct and side-effect free: nothing is read at import time.",
+    "GEMINI_MODEL, OPENAI_MODEL and UNSPLASH_ACCESS_KEY are still read directly. That is fine because they are optional and have defaults or are guarded.",
+    "In next.config.js, the env block maps supabase_publicurl and supabase_anonkey to the NEXT_PUBLIC names as build-time fallbacks. This is fine: these are public values."
+  ],
+  "updated_files": ["/app/tests/live_env_check.ts (new; not matched by the *.test.ts glob, makes a live Gemini call)"],
+  "success_rate": {"backend": "100% (17/17 HTTP, 28/28 unit, build/tsc/lint clean, live Gemini embedding OK)", "frontend": "not tested (backend-only request)"},
+  "test_credentials": "None needed; /app/memory/test_credentials.md has no accounts",
+  "seed_data_creation": "None. No Supabase writes and no Apps Script calls.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The :3005 Next server serves /app/.next. To build without disrupting it, build in a copy: tar the repo excluding node_modules and .next into /tmp, then cp -a node_modules (symlinks fail with Turbopack). Live check: geminiapi_script=<key> npx tsx tests/live_env_check.ts. HTTP regression: cd /app/tests/http && python -m pytest test_unauth_api.py -p no:cacheprovider."
+}

@@ -21,4 +21,5 @@ User choices: test against real Supabase (keys pending), move loose root files i
 - AI provider switched to Gemini (gemini-3.8-flash with fallbacks; gemini-embedding-001 @1536, normalized); OpenAI fallback. Provider-specific relevance cutoff (Gemini 0.6).
 - Forms: student link must be /viewform or forms.gle; editor must be /edit.
 - Testing agent iteration_1: 17/17 HTTP, 27/27 unit, tsc + lint clean.
-- Pending (user): run 4 migrations in Supabase SQL editor; set GEMINI_API_KEY in Vercel; rotate Gemini key pasted in chat; then test signed-in flows.
+- Pending (user): run 4 migrations in Supabase SQL editor; set geminiapi_script, openai_api_key, google_gorm_api in Vercel; rotate Gemini key pasted in chat; then test signed-in flows.
+- Session 3: server secrets read via lib/env.ts (geminiapi_script, openai_api_key, google_gorm_api first; standard names as fallbacks). Test iteration_2 passed.
